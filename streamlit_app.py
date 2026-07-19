@@ -65,14 +65,16 @@ with tab_live:
         pos_syms = list(pos["sym"].unique()) if len(pos) else []
         snaps = engine.live_snapshot(sorted(set(watch_syms + pos_syms)))
 
-        # ---- SADECE TETIKLENENLER ----
+        # ---- SADECE "LUK ALIRDI" DURUMU: fiyat tetigin USTUNDE ----
+        # (tetiklenip geri dusenler EKRANA GELMEZ — arka planda izlenir,
+        #  tekrar keserse tekrar belirir)
         st.subheader("⚡ Tetiklenenler")
         triggered = []
         for c in cands:
             snap = snaps.get(c["sym"])
             if not snap or not c.get("trigger"):
                 continue
-            if snap["day_high"] >= c["trigger"]:
+            if snap["price"] >= c["trigger"]:
                 triggered.append((c, snap))
         if not triggered:
             n = len([c for c in cands if c.get("trigger")])
@@ -86,8 +88,7 @@ with tab_live:
             for c, snap in triggered:
                 price = snap["price"]
                 stop_now = compute_stop(price, snap["day_low"], c.get("max_stop_pct"))
-                above = price >= c["trigger"]
-                durum = "🟢 [LUK: AL adayı]" if above else "🟠 tetiklendi, geri düştü"
+                durum = "🟢 [LUK: AL adayı]"
                 r = st.columns([1.2, 1.6, 1, 1, 1.6, 1, 0.9])
                 r[0].markdown(f"**{c['sym']}**")
                 r[1].write(c.get("setup", ""))
