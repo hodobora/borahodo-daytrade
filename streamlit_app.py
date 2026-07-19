@@ -34,30 +34,26 @@ def _tv_sessionid():
 
 
 def get_live(symbols):
-    """TV-oncelikli canli veri. Donus: (snaps, banner_fn) — banner her tazelemede basilir.
-    KURAL: sessizce eski veri YOK — kaynak duserse KIRMIZI uyari."""
+    """Canli veri = SADECE TradingView (2026-07-19 Bora karari: yedek yok).
+    TV olur/bayatlarsa portal KOR kalir + kirmizi alarm — duzeltilene kadar
+    hicbir fiyat gosterilmez (yanlis fiyat > hic fiyat DEGILDIR)."""
     sid = _tv_sessionid()
-    if sid:
-        snaps, state = engine.tv_snapshot(symbols, sid)
-        if state == 'tv':
-            return snaps, lambda: st.success("🟢 Veri: TradingView CANLI (gerçek zamanlı, senin aboneliğin)")
-        if state == 'tv_delayed':
-            yf_snaps = engine.live_snapshot(symbols)
-            return yf_snaps or snaps, lambda: st.error(
-                "🔴 TV verisi GECİKMELİ/BAYAT geliyor (çerez ölmüş olabilir) — "
-                "yedek yfinance kullanılıyor (~1dk gecikme). TV_SESSIONID'yi yenile!")
-        # tv_dead
-        snaps = engine.live_snapshot(symbols)
-        if snaps:
-            return snaps, lambda: st.error(
-                "🔴 TV BAĞLANTISI KOPTU — yedek yfinance (~1dk gecikme). TV_SESSIONID'yi yenile!")
-        return {}, lambda: st.error("⛔ VERİ YOK — ne TV ne yfinance yanıt veriyor. Karar verme!")
-    snaps = engine.live_snapshot(symbols)
-    if snaps:
-        return snaps, lambda: st.warning(
-            "🟠 TV çerezi girilmemiş — yfinance ile çalışıyor (~1dk gecikme). "
-            "Gerçek zamanlı için Secrets'a TV_SESSIONID ekle.")
-    return {}, lambda: st.error("⛔ VERİ YOK — kaynaklar yanıt vermiyor. Karar verme!")
+    if not sid:
+        return {}, lambda: st.error(
+            "⛔ CANLI İZLEME KAPALI — TV_SESSIONID girilmemiş. "
+            "Secrets'a ekle (F12 → Application → Cookies → tradingview.com → sessionid).")
+    snaps, state = engine.tv_snapshot(symbols, sid)
+    if state == 'tv':
+        return snaps, lambda: st.success(
+            "🟢 Veri: TradingView CANLI (gerçek zamanlı, senin aboneliğin)")
+    if state == 'tv_delayed':
+        return {}, lambda: st.error(
+            "🔴 TV verisi GECİKMELİ/BAYAT — çerez ölmüş olabilir. İzleme DURDU; "
+            "TV_SESSIONID'yi yenile (F12 → Cookies → sessionid → Secrets'i güncelle). "
+            "Yenileyene kadar fiyat GÖSTERİLMEZ.")
+    return {}, lambda: st.error(
+        "⛔ TV BAĞLANTISI KOPTU — izleme DURDU. TV_SESSIONID'yi yenile; "
+        "düzelene kadar fiyat GÖSTERİLMEZ. (Pozisyon korumam broker'daki stop emrin!)")
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
