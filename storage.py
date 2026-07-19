@@ -52,13 +52,22 @@ def open_position(sym, entry, stop, note=""):
         df.to_csv(LOCAL_TRADES, index=False)
 
 
+LAST_ERROR = None
+
+
 def get_trades(status=None):
+    global LAST_ERROR
     sb = _sb()
     if sb:
-        q = sb.table("trades").select("*")
-        if status:
-            q = q.eq("status", status)
-        df = pd.DataFrame(q.order("opened_at", desc=True).execute().data)
+        try:
+            q = sb.table("trades").select("*")
+            if status:
+                q = q.eq("status", status)
+            df = pd.DataFrame(q.order("opened_at", desc=True).execute().data)
+            LAST_ERROR = None
+        except Exception as e:
+            LAST_ERROR = f"Supabase 'trades' tablosu yok/erisilemedi — schema.sql'i SQL Editor'da calistir. ({e})"
+            df = pd.DataFrame()
     else:
         df = _local_trades()
         if status and len(df):
@@ -109,10 +118,13 @@ def _local_trades():
 def save_plan(plan):
     sb = _sb()
     if sb:
-        sb.table("plans").upsert(
-            dict(for_day=plan["for_day"], kind=plan["kind"],
-                 payload=json.dumps(plan, ensure_ascii=False)),
-            on_conflict="for_day,kind").execute()
+        try:
+            sb.table("plans").upsert(
+                dict(for_day=plan["for_day"], kind=plan["kind"],
+                     payload=json.dumps(plan, ensure_ascii=False)),
+                on_conflict="for_day,kind").execute()
+        except Exception as e:
+            print(f"UYARI: plan Supabase'e yazilamadi ({e}) — lokal JSON'a devam")
     os.makedirs(LOCAL_PLANS, exist_ok=True)
     with open(os.path.join(LOCAL_PLANS, f"plan_{plan['for_day']}_{plan['kind']}.json"),
               "w", encoding="utf-8") as f:
@@ -120,13 +132,19 @@ def save_plan(plan):
 
 
 def get_latest_plans(n=4):
+    global LAST_ERROR
     sb = _sb()
     out = []
     if sb:
-        rows = (sb.table("plans").select("*").order("for_day", desc=True)
-                .limit(n).execute().data)
-        out = [json.loads(r["payload"]) for r in rows]
-    else:
+        try:
+            rows = (sb.table("plans").select("*").order("for_day", desc=True)
+                    .limit(n).execute().data)
+            out = [json.loads(r["payload"]) if isinstance(r["payload"], str)
+                   else r["payload"] for r in rows]
+        except Exception as e:
+            LAST_ERROR = f"Supabase 'plans' tablosu yok/erisilemedi — schema.sql'i calistir. ({e})"
+            out = []
+    if not out:
         import glob
         for f in sorted(glob.glob(os.path.join(LOCAL_PLANS, "plan_*.json")),
                         reverse=True)[:n]:
