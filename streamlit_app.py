@@ -16,8 +16,11 @@ st.set_page_config(page_title="borahodo-daytrade", page_icon="📈", layout="wid
 st.title("📈 borahodo-daytrade — LUK Model V1")
 st.caption(f"Depo: {storage.backend_name()} · Veri kaynağı: aşağıdaki banner'da · "
            "KARAR: BORA · Emirler TradingView/broker ekranından")
+storage.get_trades(status="closed")   # tablo varligini yokla (LAST_ERROR'u doldurur)
 if storage.LAST_ERROR:
-    st.warning(storage.LAST_ERROR)
+    st.error("⛔ KAYIT KALICI DEĞİL — Supabase tabloları kurulmamış! "
+             "SQL Editor'da schema.sql'i çalıştırmadan AL kaydı yapma. "
+             f"({storage.LAST_ERROR[:90]})")
 
 REFRESH_SEC = 15
 
