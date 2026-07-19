@@ -47,7 +47,12 @@ tab_live, tab_plan, tab_log = st.tabs(["🔴 CANLI", "📋 Plan", "📊 Log"])
 # ---------------- CANLI ----------------
 with tab_live:
     plan = latest_evening_candidates()
-    cands = list(plan.get("candidates", []))[:15] if plan else []
+    # Plan ne urettiyse HEPSI izlenir (teknik guvenlik: 60 ustu tek istekte yavaslar,
+    # asilirsa en guclu 60 alinir ve ekranda soylenir)
+    cands = list(plan.get("candidates", [])) if plan else []
+    if len(cands) > 60:
+        st.warning(f"Plan {len(cands)} aday uretti — tazeleme hizi icin en guclu 60'i izleniyor.")
+        cands = cands[:60]
     extra = st.text_input("İzlemeye elle isim ekle (virgülle)", key="extra_syms",
                           placeholder="ATAI, TXG")
     if extra.strip():
