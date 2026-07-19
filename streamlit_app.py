@@ -14,7 +14,7 @@ import storage, engine
 
 st.set_page_config(page_title="borahodo-daytrade", page_icon="📈", layout="wide")
 st.title("📈 borahodo-daytrade — LUK Model V1")
-st.caption(f"Depo: {storage.backend_name()} · Veri: yfinance (~sn-1dk gecikme) · "
+st.caption(f"Depo: {storage.backend_name()} · Veri kaynağı: aşağıdaki banner'da · "
            "KARAR: BORA · Emirler TradingView/broker ekranından")
 if storage.LAST_ERROR:
     st.warning(storage.LAST_ERROR)
