@@ -22,9 +22,52 @@ if storage.LAST_ERROR:
 REFRESH_SEC = 15
 
 
+def _tv_sessionid():
+    import os
+    v = os.environ.get("TV_SESSIONID")
+    if not v:
+        try:
+            v = st.secrets.get("TV_SESSIONID")
+        except Exception:
+            v = None
+    return v
+
+
+def get_live(symbols):
+    """TV-oncelikli canli veri. Donus: (snaps, banner_fn) — banner her tazelemede basilir.
+    KURAL: sessizce eski veri YOK — kaynak duserse KIRMIZI uyari."""
+    sid = _tv_sessionid()
+    if sid:
+        snaps, state = engine.tv_snapshot(symbols, sid)
+        if state == 'tv':
+            return snaps, lambda: st.success("🟢 Veri: TradingView CANLI (gerçek zamanlı, senin aboneliğin)")
+        if state == 'tv_delayed':
+            yf_snaps = engine.live_snapshot(symbols)
+            return yf_snaps or snaps, lambda: st.error(
+                "🔴 TV verisi GECİKMELİ/BAYAT geliyor (çerez ölmüş olabilir) — "
+                "yedek yfinance kullanılıyor (~1dk gecikme). TV_SESSIONID'yi yenile!")
+        # tv_dead
+        snaps = engine.live_snapshot(symbols)
+        if snaps:
+            return snaps, lambda: st.error(
+                "🔴 TV BAĞLANTISI KOPTU — yedek yfinance (~1dk gecikme). TV_SESSIONID'yi yenile!")
+        return {}, lambda: st.error("⛔ VERİ YOK — ne TV ne yfinance yanıt veriyor. Karar verme!")
+    snaps = engine.live_snapshot(symbols)
+    if snaps:
+        return snaps, lambda: st.warning(
+            "🟠 TV çerezi girilmemiş — yfinance ile çalışıyor (~1dk gecikme). "
+            "Gerçek zamanlı için Secrets'a TV_SESSIONID ekle.")
+    return {}, lambda: st.error("⛔ VERİ YOK — kaynaklar yanıt vermiyor. Karar verme!")
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def cached_daily(symbols):
     return engine.daily_context(tuple(sorted(symbols)))
+
+
+@st.cache_data(ttl=240, show_spinner=False)
+def cached_orh(symbols, day):
+    return engine.get_orh(tuple(sorted(symbols)))
 
 
 def latest_evening_candidates():
@@ -64,11 +107,14 @@ with tab_live:
 
     @st.fragment(run_every=REFRESH_SEC)
     def live_frag():
-        # ---- arka plan izleme ----
+        # ---- arka plan izleme (TV-oncelikli veri) ----
         watch_syms = [c["sym"] for c in cands]
         pos = storage.get_trades(status="open")
         pos_syms = list(pos["sym"].unique()) if len(pos) else []
-        snaps = engine.live_snapshot(sorted(set(watch_syms + pos_syms)))
+        snaps, banner = get_live(sorted(set(watch_syms + pos_syms)))
+        banner()
+        ctx_all = cached_daily(watch_syms) if watch_syms else {}
+        orh_map = cached_orh(watch_syms, str(date.today())) if watch_syms else {}
 
         # ---- SADECE "LUK ALIRDI" DURUMU: fiyat tetigin USTUNDE ----
         # (tetiklenip geri dusenler EKRANA GELMEZ — arka planda izlenir,
@@ -77,10 +123,22 @@ with tab_live:
         triggered = []
         for c in cands:
             snap = snaps.get(c["sym"])
-            if not snap or not c.get("trigger"):
+            if not snap:
                 continue
-            if snap["price"] >= c["trigger"]:
-                triggered.append((c, snap))
+            price = snap["price"]
+            levels = []
+            if c.get("trigger"):
+                levels.append(("5a PDH", float(c["trigger"])))
+            # 5b ORH: gap acilista (acilis > dun kapanis) ilk 1dk mumun high'i (Luk 38:18)
+            orh = orh_map.get(c["sym"])
+            ctx = ctx_all.get(c["sym"])
+            if orh and ctx and snap.get("day_open") and snap["day_open"] > ctx["prev_close"]:
+                levels.append(("5b ORH", round(orh["orh"], 2)))
+            crossed = [(nm, lv) for nm, lv in levels if price >= lv]
+            if crossed:
+                nm, lv = max(crossed, key=lambda x: x[1])  # kirilan en yuksek seviye esas
+                c2 = dict(c); c2["setup"] = nm; c2["trigger"] = lv
+                triggered.append((c2, snap))
         if not triggered:
             n = len([c for c in cands if c.get("trigger")])
             st.caption(f"Tetik yok — {n} isim arka planda izleniyor · "

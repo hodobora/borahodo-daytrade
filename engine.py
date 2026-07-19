@@ -3,9 +3,79 @@
 Canli veri + sinyal motoru (LUK_MODEL_V1 kurallari).
 Veri: yfinance (kimliksiz, ~saniyeler-1dk gecikme). Karar YOK — durum uretir.
 """
-import math
+import math, time
 import pandas as pd
 import yfinance as yf
+
+
+def tv_snapshot(symbols, sessionid):
+    """TradingView canli veri (kullanicinin oturum cerezi ile — gercek zamanli).
+    Donus: (snaps, kaynak_durumu)  kaynak_durumu: 'tv' | 'tv_delayed' | 'tv_dead'
+    """
+    try:
+        from tradingview_screener import Query, col
+        q = (Query()
+             .select('name', 'close', 'high', 'low', 'open', 'volume',
+                     'update_mode', 'lp_time')
+             .where(col('name').isin(list(symbols)))
+             .limit(len(symbols) + 10))
+        _, df = q.get_scanner_data(cookies={'sessionid': sessionid})
+    except Exception:
+        return {}, 'tv_dead'
+    if df is None or not len(df):
+        return {}, 'tv_dead'
+    out, modes, lp_ages = {}, set(), []
+    now = time.time()
+    for _, r in df.iterrows():
+        try:
+            out[str(r['name'])] = dict(
+                price=float(r['close']), day_high=float(r['high']),
+                day_low=float(r['low']), day_open=float(r['open']),
+                day_vol=float(r['volume'] or 0), asof=str(r.get('lp_time')))
+            modes.add(str(r.get('update_mode', '')))
+            if r.get('lp_time'):
+                lp_ages.append(now - float(r['lp_time']))
+        except Exception:
+            continue
+    if not out:
+        return {}, 'tv_dead'
+    delayed = any('delayed' in m for m in modes)
+    # RTH icinde veri 3 dk'dan eskiyse bayat say (piyasa kapaliyken dogal olarak eski)
+    stale = _market_open_now() and lp_ages and min(lp_ages) > 180
+    if delayed or stale:
+        return out, 'tv_delayed'
+    return out, 'tv'
+
+
+def _market_open_now():
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
+    et = datetime.now(ZoneInfo('America/New_York'))
+    return et.weekday() < 5 and (9, 30) <= (et.hour, et.minute) < (16, 0)
+
+
+def get_orh(symbols):
+    """Acilistan sonra: gunun ILK 1-dakikalik mumunun high/low'u (Luk ORH tanimi).
+    yfinance 1dk verisi ~1dk gecikmeli — acilisin ilk 2-3 dakikasinda ORH gec
+    gorulebilir (bilinen kisit)."""
+    out = {}
+    if not symbols or not _market_open_now():
+        return out
+    try:
+        df = yf.download(list(symbols), period="1d", interval="1m",
+                         auto_adjust=True, group_by="ticker", threads=True,
+                         progress=False, prepost=False)
+        for s in symbols:
+            try:
+                d = df[s].dropna(subset=["Close"]) if isinstance(df.columns, pd.MultiIndex) else df.dropna(subset=["Close"])
+                if len(d):
+                    out[s] = dict(orh=float(d["High"].iloc[0]),
+                                  orl=float(d["Low"].iloc[0]))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
 
 
 def live_snapshot(symbols):
