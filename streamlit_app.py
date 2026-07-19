@@ -215,10 +215,15 @@ with tab_live:
                                    "Luk burada güce satardı (GME/AMC pre-market çıkışları). "
                                    "IBKR'de uzatılmış seans emri verebilirsin. KARAR: BORA")
                     if ep <= float(row["stop"]):
-                        st.error(f"⚠ {s}: uzatılmış seansta STOP ALTINDA ({ep:.2f} ≤ {row['stop']}) — "
-                                 "broker stop emrin seans dışında ÇALIŞMAZ (aktifleştirmediysen); "
-                                 "açılışta gap riskine hazır ol. Kayıt açık tutuluyor.")
-                # OTOMATIK STOP: sadece NORMAL SEANSTA fiyat stopa degdiyse kaydi kapat
+                        # 2026-07-19 Bora karari: IBKR stoplari 'outside RTH' isaretli —
+                        # uzatilmis seansta da stop gercekten calisir, kayit da kapanir
+                        storage.close_position(row["id"], float(row["stop"]),
+                                               "stop (otomatik, uzatılmış seans)")
+                        st.error(f"🔴 {s}: uzatılmış seansta stopa değdi ({row['stop']}) — kayıt "
+                                 "otomatik kapatıldı. IBKR emrinin 'outside RTH' işaretli olduğunu "
+                                 "ve gerçekten dolduğunu kontrol et!")
+                        continue
+                # OTOMATIK STOP: normal seansta fiyat stopa degdiyse kaydi kapat
                 if rth and snap and snap["price"] <= float(row["stop"]):
                     storage.close_position(row["id"], float(row["stop"]), "stop (otomatik)")
                     st.error(f"🔴 {s}: fiyat stopa değdi ({row['stop']}) — kayıt otomatik "
