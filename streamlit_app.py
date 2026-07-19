@@ -133,8 +133,13 @@ with tab_live:
         # (tetiklenip geri dusenler EKRANA GELMEZ — arka planda izlenir,
         #  tekrar keserse tekrar belirir)
         st.subheader("⚡ Tetiklenenler")
+        rth_open = engine._market_open_now()
+        if not rth_open:
+            st.caption("🔴 Piyasa kapalı — tetikler yalnızca normal seansta (15:30-22:00 CET) "
+                       "değerlendirilir; pre/after-market fiyatı AL sinyali ÜRETMEZ (Luk kuralı). "
+                       f"{len([c for c in cands if c.get('trigger')])} isim planda hazır bekliyor.")
         triggered = []
-        for c in cands:
+        for c in cands if rth_open else []:
             snap = snaps.get(c["sym"])
             if not snap:
                 continue
@@ -193,12 +198,28 @@ with tab_live:
             for col, t in zip(h, ["**Ticker**", "**Giriş**", "**Stop**", "**Kâr %**",
                                   "**R**", "**Durum**", "", ""]):
                 col.markdown(t)
+            rth = engine._market_open_now()
             for _, row in pos.iterrows():
                 s = row["sym"]
                 snap = snaps.get(s)
                 stt = engine.position_status(row, snap, ctxs.get(s))
-                # OTOMATIK STOP: fiyat stopa degdiyse kaydi kapat
-                if snap and snap["price"] <= float(row["stop"]):
+                # UZATILMIS SEANS (pre/after): sadece IZLEME + uyari — otomatik kapatma YOK
+                if not rth and snap and snap.get("ext_price"):
+                    ep, ec = snap["ext_price"], snap.get("ext_chg") or 0
+                    ext_kar = (ep / float(row["entry"]) - 1) * 100
+                    st.info(f"🌙 **{s}** uzatılmış seans: {ep:.2f} ({ec:+.1f}%) · "
+                            f"pozisyon kârı %{ext_kar:+.1f}")
+                    r_unit = float(row["entry"]) - float(row["stop"])
+                    if r_unit > 0 and (ep - float(row["entry"])) / r_unit >= 4 and ec >= 8:
+                        st.warning(f"🟠 {s}: uzatılmış seansta PARABOLİK (+{ec:.1f}%) — "
+                                   "Luk burada güce satardı (GME/AMC pre-market çıkışları). "
+                                   "IBKR'de uzatılmış seans emri verebilirsin. KARAR: BORA")
+                    if ep <= float(row["stop"]):
+                        st.error(f"⚠ {s}: uzatılmış seansta STOP ALTINDA ({ep:.2f} ≤ {row['stop']}) — "
+                                 "broker stop emrin seans dışında ÇALIŞMAZ (aktifleştirmediysen); "
+                                 "açılışta gap riskine hazır ol. Kayıt açık tutuluyor.")
+                # OTOMATIK STOP: sadece NORMAL SEANSTA fiyat stopa degdiyse kaydi kapat
+                if rth and snap and snap["price"] <= float(row["stop"]):
                     storage.close_position(row["id"], float(row["stop"]), "stop (otomatik)")
                     st.error(f"🔴 {s}: fiyat stopa değdi ({row['stop']}) — kayıt otomatik "
                              "kapatıldı. Broker emrinin çalıştığını kontrol et!")

@@ -16,7 +16,9 @@ def tv_snapshot(symbols, sessionid):
         from tradingview_screener import Query, col
         q = (Query()
              .select('name', 'close', 'high', 'low', 'open', 'volume',
-                     'update_mode', 'lp_time')
+                     'update_mode', 'lp_time',
+                     'premarket_close', 'premarket_change',
+                     'postmarket_close', 'postmarket_change')
              .where(col('name').isin(list(symbols)))
              .limit(len(symbols) + 10))
         _, df = q.get_scanner_data(cookies={'sessionid': sessionid})
@@ -28,10 +30,17 @@ def tv_snapshot(symbols, sessionid):
     now = time.time()
     for _, r in df.iterrows():
         try:
+            def _f(x):
+                try:
+                    return float(x) if x is not None and not (isinstance(x, float) and math.isnan(x)) else None
+                except Exception:
+                    return None
             out[str(r['name'])] = dict(
                 price=float(r['close']), day_high=float(r['high']),
                 day_low=float(r['low']), day_open=float(r['open']),
-                day_vol=float(r['volume'] or 0), asof=str(r.get('lp_time')))
+                day_vol=float(r['volume'] or 0), asof=str(r.get('lp_time')),
+                ext_price=_f(r.get('premarket_close')) or _f(r.get('postmarket_close')),
+                ext_chg=_f(r.get('premarket_change')) or _f(r.get('postmarket_change')))
             modes.add(str(r.get('update_mode', '')))
             if r.get('lp_time'):
                 lp_ages.append(now - float(r['lp_time']))
