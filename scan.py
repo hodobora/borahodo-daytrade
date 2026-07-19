@@ -15,9 +15,24 @@ Asama 2: kisa liste icin yfinance gunluk bar -> EMA 9/21/50 dizilimi, inside/dar
          tetik + stop referanslari (model kurallari)
 """
 import os, sys, json, math
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 import pandas as pd
 import numpy as np
+
+ET = ZoneInfo("America/New_York")
+
+
+def target_trading_day(kind):
+    """Planin UYGULANACAGI ABD islem gunu (tarih karismasin — 2026-07-19 kurali).
+    premarket: bugunun seansi (hafta sonuysa sonraki pazartesi).
+    evening  : SONRAKI islem gunu (aksam kosusu ertesi gunun planidir)."""
+    d = datetime.now(ET).date()
+    if kind == "evening":
+        d = d + timedelta(days=1)
+    while d.weekday() >= 5:
+        d = d + timedelta(days=1)
+    return str(d)
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 PLANS = os.path.join(BASE, "plans")
@@ -98,7 +113,7 @@ def evening():
     df = broad_scan()
     leaders = df[df["Perf.1M"] >= RS_1M_MIN]
     info = refine_daily(sorted(leaders["sym"].unique()))
-    plan = dict(kind="evening", created=str(datetime.now()), for_day=str(date.today()),
+    plan = dict(kind="evening", created=str(datetime.now()), for_day=target_trading_day("evening"),
                 leading_count=0, candidates=[])
     for _, r in leaders.iterrows():
         t = r["sym"]
@@ -155,7 +170,7 @@ def premarket():
             adr_pct=round(k["adr"] * 100, 1),
         ))
     eps.sort(key=lambda x: -x["pm_gap_pct"])
-    plan = dict(kind="premarket", created=str(datetime.now()), for_day=str(date.today()),
+    plan = dict(kind="premarket", created=str(datetime.now()), for_day=target_trading_day("premarket"),
                 potent=potent.to_dict("records"), ep_candidates=eps)
     save(plan)
 

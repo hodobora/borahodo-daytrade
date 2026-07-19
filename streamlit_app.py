@@ -6,15 +6,29 @@ Kayitli pozisyonda fiyat stopa degerse portal kaydi OTOMATIK kapatir (stop).
 Gercek koruma broker'daki stop emridir — portal kayit/izleme katmanidir.
 """
 import time
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 
 import storage, engine
 
+ET = ZoneInfo("America/New_York")
+GUN_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
+
+
+def ny_clock_line():
+    now = datetime.now(ET)
+    durum = "🟢 PİYASA AÇIK" if engine._market_open_now() else "🔴 PİYASA KAPALI"
+    return f"NY: {GUN_TR[now.weekday()]} {now.strftime('%d %b %H:%M')} · {durum}"
+
+
+def et_today():
+    return datetime.now(ET).date()
+
 st.set_page_config(page_title="borahodo-daytrade", page_icon="📈", layout="wide")
 st.title("📈 borahodo-daytrade — LUK Model V1")
-st.caption(f"Depo: {storage.backend_name()} · Veri kaynağı: aşağıdaki banner'da · "
+st.caption(f"**{ny_clock_line()}** · Depo: {storage.backend_name()} · "
            "KARAR: BORA · Emirler TradingView/broker ekranından")
 storage.get_trades(status="closed")   # tablo varligini yokla (LAST_ERROR'u doldurur)
 if storage.LAST_ERROR:
@@ -206,11 +220,12 @@ with tab_live:
                     storage.close_position(row["id"], px, "manuel SAT")
                     st.toast(f"{s} kapatıldı @ {px:.2f}", icon="💰")
                     st.rerun(scope="fragment")
-        # ---- BUGUN KAPANANLAR (kalici serit — stop kacirilmasin) ----
+        # ---- BUGUN KAPANANLAR (kalici serit; "bugun" = NY islem gunu) ----
         closed = storage.get_trades(status="closed")
         if len(closed):
-            today = str(date.today())
-            closed_today = closed[closed["closed_at"].astype(str).str[:10] == today]
+            et_dates = pd.to_datetime(closed["closed_at"], utc=True).dt.tz_convert(
+                "America/New_York").dt.date
+            closed_today = closed[et_dates == et_today()]
             if len(closed_today):
                 st.subheader("📕 Bugün kapananlar")
                 for _, r in closed_today.iterrows():

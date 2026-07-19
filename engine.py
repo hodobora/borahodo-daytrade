@@ -107,12 +107,18 @@ def daily_context(symbols):
     out = {}
     if not symbols:
         return out
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
+    today_et = datetime.now(ZoneInfo('America/New_York')).date()
     df = yf.download(list(symbols), period="4mo", auto_adjust=True,
                      group_by="ticker", threads=True, progress=False)
     for s in symbols:
         try:
             d = df[s].dropna(subset=["Close"]) if isinstance(df.columns, pd.MultiIndex) else df.dropna(subset=["Close"])
-            c, v = d["Close"], d["Volume"]
+            # BUGUNUN (NY) tamamlanmamis bari varsa dislari birak — prev_close her
+            # zaman SON TAMAMLANMIS seansin kapanisi olsun (tarih karismasin kurali)
+            d_hist = d[d.index.date < today_et] if len(d) and d.index[-1].date() == today_et else d
+            c, v = d_hist["Close"], d_hist["Volume"]
             if len(c) < 55:
                 continue
             out[s] = dict(
@@ -120,7 +126,7 @@ def daily_context(symbols):
                 e21=float(c.ewm(span=21, adjust=False).mean().iloc[-1]),
                 e50=float(c.ewm(span=50, adjust=False).mean().iloc[-1]),
                 avgvol20=float(v.rolling(20).mean().iloc[-1]),
-                prev_close=float(c.iloc[-2]),
+                prev_close=float(c.iloc[-1]),
             )
         except Exception:
             continue
