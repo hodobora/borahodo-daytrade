@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 BORAHODO-DAYTRADE — LUK Model V1 portali.
-Sekmeler: CANLI (adaylar+tetikler) · POZISYONLAR (kar% + SAT adaylari) · PLAN · LOG
-Kural: sistem [AL adayi]/[SAT adayi] der — KARAR VE EMIR: BORA (TradingView/broker).
+CANLI: SADECE tetiklenen adaylar (izleme arka planda) + tek tik AL + altta portfoy.
+Kayitli pozisyonda fiyat stopa degerse portal kaydi OTOMATIK kapatir (stop).
+Gercek koruma broker'daki stop emridir — portal kayit/izleme katmanidir.
 """
 import time
 from datetime import date
@@ -14,7 +15,7 @@ import storage, engine
 st.set_page_config(page_title="borahodo-daytrade", page_icon="📈", layout="wide")
 st.title("📈 borahodo-daytrade — LUK Model V1")
 st.caption(f"Depo: {storage.backend_name()} · Veri: yfinance (~sn-1dk gecikme) · "
-           "Sistem aday söyler, KARAR: BORA · Emirler TradingView/broker ekranından")
+           "KARAR: BORA · Emirler TradingView/broker ekranından")
 
 REFRESH_SEC = 15
 
@@ -31,110 +32,125 @@ def latest_evening_candidates():
     return None
 
 
-tab_live, tab_pos, tab_plan, tab_log = st.tabs(
-    ["🔴 CANLI", "💼 Pozisyonlar", "📋 Plan", "📊 Log"])
+def compute_stop(price, day_low, max_stop_pct):
+    """Tek-tik AL icin stop: gunun low'u; cok uzaksa max-stop tavani (model kurali)."""
+    ms = (max_stop_pct or 5.0) / 100.0
+    if day_low and day_low < price and (price / day_low - 1) <= ms:
+        return round(day_low, 2)
+    return round(price * (1 - ms), 2)
+
+
+tab_live, tab_plan, tab_log = st.tabs(["🔴 CANLI", "📋 Plan", "📊 Log"])
 
 # ---------------- CANLI ----------------
 with tab_live:
     plan = latest_evening_candidates()
-    if not plan:
-        st.info("Plan yok. Lokalde çalıştır: `python scan.py evening`")
-    else:
-        st.caption(f"Plan: {plan['for_day']} · Leading termometresi: {plan.get('leading_count')} isim")
-        extra = st.text_input("İzlemeye elle isim ekle (virgülle)", key="extra_syms",
-                              placeholder="ATAI, TXG")
-        cands = list(plan.get("candidates", []))[:15]
-        if extra.strip():
-            have = {c["sym"] for c in cands}
-            for s in [x.strip().upper() for x in extra.split(",") if x.strip()]:
-                if s not in have:
-                    cands.append(dict(sym=s, setup="elle", trigger=None,
-                                      stop_ref=None, max_stop_pct=None))
+    cands = list(plan.get("candidates", []))[:15] if plan else []
+    extra = st.text_input("İzlemeye elle isim ekle (virgülle)", key="extra_syms",
+                          placeholder="ATAI, TXG")
+    if extra.strip():
+        have = {c["sym"] for c in cands}
+        for s in [x.strip().upper() for x in extra.split(",") if x.strip()]:
+            if s not in have:
+                cands.append(dict(sym=s, setup="elle", trigger=None,
+                                  stop_ref=None, max_stop_pct=None))
 
-        @st.fragment(run_every=REFRESH_SEC)
-        def live_frag():
-            syms = [c["sym"] for c in cands]
-            snaps = engine.live_snapshot(syms)
-            rows = []
-            for c in cands:
-                snap = snaps.get(c["sym"])
-                state, info = engine.watch_status(c, snap)
-                rows.append(dict(
-                    Sembol=c["sym"], Setup=c.get("setup", ""),
-                    Fiyat=snap["price"] if snap else None,
-                    Tetik=c.get("trigger"), Durum=state, Bilgi=info,
-                    StopRef=c.get("stop_ref"), MaxStop=c.get("max_stop_pct")))
-            df = pd.DataFrame(rows)
-            al_rows = df[df["Durum"] == "AL_ADAYI"]
-            for _, r in al_rows.iterrows():
-                st.warning(f"**[LUK SİSTEMİ: AL adayı] {r.Sembol}** — tetik {r.Tetik} kırıldı "
-                           f"| fiyat {r.Fiyat} | stop ref {r.StopRef} (max %{r.MaxStop}) "
-                           f"| teyit: hacim + 5dk 9EMA + endeks | KARAR: BORA")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.caption(f"Son tazeleme: {time.strftime('%H:%M:%S')} (her {REFRESH_SEC} sn)")
-
-            st.markdown("**AL kaydı** (girdiysen — emri TV/broker'dan verdikten sonra):")
-            c1, c2, c3, c4 = st.columns(4)
-            sym = c1.selectbox("Sembol", [c["sym"] for c in cands], key="al_sym")
-            snap = snaps.get(sym)
-            entry = c2.number_input("Giriş", value=float(snap["price"]) if snap else 0.0,
-                                    step=0.01, key="al_entry")
-            stop = c3.number_input("Stop (girdiğin emir)", value=0.0, step=0.01, key="al_stop")
-            if c4.button("AL kaydet", type="primary", key="al_btn"):
-                if sym and entry > 0 and 0 < stop < entry:
-                    storage.open_position(sym, entry, stop)
-                    st.success(f"{sym} kaydedildi — Pozisyonlar sekmesinde canlı izlenecek. "
-                               "Stop emrini broker'a girmeyi UNUTMA.")
-                else:
-                    st.error("Stop, girişin altında ve > 0 olmalı.")
-        live_frag()
-
-# ---------------- POZISYONLAR ----------------
-with tab_pos:
     @st.fragment(run_every=REFRESH_SEC)
-    def pos_frag():
+    def live_frag():
+        # ---- arka plan izleme ----
+        watch_syms = [c["sym"] for c in cands]
+        pos = storage.get_trades(status="open")
+        pos_syms = list(pos["sym"].unique()) if len(pos) else []
+        snaps = engine.live_snapshot(sorted(set(watch_syms + pos_syms)))
+
+        # ---- SADECE TETIKLENENLER ----
+        st.subheader("⚡ Tetiklenenler")
+        triggered = []
+        for c in cands:
+            snap = snaps.get(c["sym"])
+            if not snap or not c.get("trigger"):
+                continue
+            if snap["day_high"] >= c["trigger"]:
+                triggered.append((c, snap))
+        if not triggered:
+            n = len([c for c in cands if c.get("trigger")])
+            st.caption(f"Tetik yok — {n} isim arka planda izleniyor · "
+                       f"son tazeleme {time.strftime('%H:%M:%S')} (her {REFRESH_SEC} sn)")
+        else:
+            h = st.columns([1.2, 1.6, 1, 1, 1.6, 1, 0.9])
+            for col, t in zip(h, ["**Ticker**", "**Setup**", "**Fiyat**", "**Tetik**",
+                                  "**Durum**", "**Stop**", ""]):
+                col.markdown(t)
+            for c, snap in triggered:
+                price = snap["price"]
+                stop_now = compute_stop(price, snap["day_low"], c.get("max_stop_pct"))
+                above = price >= c["trigger"]
+                durum = "🟢 [LUK: AL adayı]" if above else "🟠 tetiklendi, geri düştü"
+                r = st.columns([1.2, 1.6, 1, 1, 1.6, 1, 0.9])
+                r[0].markdown(f"**{c['sym']}**")
+                r[1].write(c.get("setup", ""))
+                r[2].write(f"{price:.2f}")
+                r[3].write(f"{c['trigger']}")
+                r[4].write(durum)
+                r[5].write(f"{stop_now:.2f}")
+                if r[6].button("AL", key=f"al_{c['sym']}", type="primary",
+                               disabled=c["sym"] in pos_syms):
+                    storage.open_position(c["sym"], price, stop_now,
+                                          note=c.get("setup", ""))
+                    st.toast(f"{c['sym']} kaydedildi: giriş {price:.2f}, stop {stop_now:.2f}. "
+                             "Broker'a stop emrini girmeyi unutma!", icon="✅")
+                    st.rerun(scope="fragment")
+
+        st.divider()
+
+        # ---- PORTFOY ----
+        st.subheader("💼 Portföy")
         pos = storage.get_trades(status="open")
         if not len(pos):
-            st.info("Açık pozisyon yok. CANLI sekmesinden AL kaydı düşünce burada izlenir.")
-            return
-        syms = list(pos["sym"].unique())
-        snaps = engine.live_snapshot(syms)
-        ctxs = cached_daily(syms)
-        for _, row in pos.iterrows():
-            s = row["sym"]
-            stt = engine.position_status(row, snaps.get(s), ctxs.get(s))
-            head = engine.FLAG_TR.get(stt["state"], stt["state"])
-            with st.container(border=True):
-                a, b, c, d, e = st.columns([2, 1, 1, 1, 2])
-                a.markdown(f"### {s}  \n{head}")
-                b.metric("Kâr %", f"%{stt['kar_pct']}" if stt["kar_pct"] is not None else "—")
-                c.metric("R", stt["r"] if stt["r"] is not None else "—")
-                d.metric("Stopa uzaklık", f"%{stt.get('stop_dist','—')}")
-                e.markdown(f"Giriş {row['entry']} · Stop {row['stop']}  \n"
-                           f"9EMA'ya %{stt.get('e9_dist','—')} · 21: %{stt.get('e21_dist','—')} · "
-                           f"50: %{stt.get('e50_dist','—')}  \n"
-                           f"Gün: %{stt.get('day_chg','—')} · Hacim: {stt.get('vol_x','—')}x")
-                for f in stt["flags"]:
-                    st.warning(engine.FLAG_TR[f] + " — **KARAR: BORA**")
-                x1, x2, x3, x4 = st.columns(4)
-                px = snaps.get(s, {}).get("price", 0.0)
-                reason = x1.selectbox("Sebep", ["3R trim", "klimaks", "9EMA", "stop",
-                                                "direnç/his", "diğer"], key=f"rs{row['id']}")
-                if x2.button("SAT-KISMİ %30", key=f"p{row['id']}"):
-                    storage.partial_exit(row["id"], px, 30)
-                    st.success(f"{s}: %30 çıkış {px} kaydedildi")
-                if x3.button("SAT-HEPSİ", key=f"c{row['id']}"):
-                    storage.close_position(row["id"], px, reason)
-                    st.success(f"{s} kapandı ({reason})")
-                x4.caption(f"Anlık: {px}")
-        st.caption(f"Son tazeleme: {time.strftime('%H:%M:%S')}")
-    pos_frag()
+            st.caption("Açık pozisyon yok.")
+        else:
+            ctxs = cached_daily(list(pos["sym"].unique()))
+            h = st.columns([1.2, 1, 1, 1, 1, 2.2, 0.8, 0.8])
+            for col, t in zip(h, ["**Ticker**", "**Giriş**", "**Stop**", "**Kâr %**",
+                                  "**R**", "**Durum**", "", ""]):
+                col.markdown(t)
+            for _, row in pos.iterrows():
+                s = row["sym"]
+                snap = snaps.get(s)
+                stt = engine.position_status(row, snap, ctxs.get(s))
+                # OTOMATIK STOP: fiyat stopa degdiyse kaydi kapat
+                if snap and snap["price"] <= float(row["stop"]):
+                    storage.close_position(row["id"], float(row["stop"]), "stop (otomatik)")
+                    st.error(f"🔴 {s}: fiyat stopa değdi ({row['stop']}) — kayıt otomatik "
+                             "kapatıldı. Broker emrinin çalıştığını kontrol et!")
+                    continue
+                r = st.columns([1.2, 1, 1, 1, 1, 2.2, 0.8, 0.8])
+                r[0].markdown(f"**{s}**")
+                r[1].write(f"{float(row['entry']):.2f}")
+                r[2].write(f"{float(row['stop']):.2f}")
+                kar = stt["kar_pct"]
+                r[3].markdown(f"**{'🟢' if (kar or 0) >= 0 else '🔴'} %{kar}**"
+                              if kar is not None else "—")
+                r[4].write(stt["r"] if stt["r"] is not None else "—")
+                flags = [engine.FLAG_TR[f] for f in stt["flags"] if f != "STOP_YENDI"]
+                r[5].write(" · ".join(flags) if flags else "🟢 TUT")
+                if r[6].button("TUT", key=f"tut_{row['id']}"):
+                    st.toast(f"{s}: TUT — pozisyon devam", icon="🟢")
+                if r[7].button("SAT", key=f"sat_{row['id']}"):
+                    px = snap["price"] if snap else float(row["entry"])
+                    storage.close_position(row["id"], px, "manuel SAT")
+                    st.toast(f"{s} kapatıldı @ {px:.2f}", icon="💰")
+                    st.rerun(scope="fragment")
+        st.caption(f"Son tazeleme: {time.strftime('%H:%M:%S')} · Stop otomatiği yalnızca "
+                   "sayfa açıkken çalışır — asıl koruma broker'daki stop emrin.")
+    live_frag()
 
 # ---------------- PLAN ----------------
 with tab_plan:
     for p in storage.get_latest_plans(4):
         st.subheader(f"{p['for_day']} — {p['kind'].upper()}")
         if p["kind"] == "evening":
+            st.caption(f"Leading termometresi: {p.get('leading_count')} isim")
             st.dataframe(pd.DataFrame(p.get("candidates", [])),
                          use_container_width=True, hide_index=True)
         else:
@@ -146,7 +162,7 @@ with tab_plan:
         st.divider()
     st.caption("Kurallar: günde max ~5 isim SENİN seçimin · tereddüt=pas · endeks düşen "
                "21/50'ye bounce ise giriş yok · binary ~2 hafta içinde ise giriş yok · "
-               "stop girişle aynı anda EMİR · piramitleme yok.")
+               "stop girişle aynı anda broker'da EMİR · piramitleme yok.")
 
 # ---------------- LOG ----------------
 with tab_log:
