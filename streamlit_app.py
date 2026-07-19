@@ -241,16 +241,52 @@ with tab_plan:
                "stop girişle aynı anda broker'da EMİR · piramitleme yok.")
 
 # ---------------- LOG ----------------
+def _trade_pct(row):
+    """Esit-boyut varsayimiyla trade'in % getirisi (kismi cikis dahil, karma)."""
+    try:
+        entry = float(row["entry"])
+        rem, pct = 1.0, 0.0
+        if row.get("partial_price") and float(row.get("partial_pct") or 0) > 0:
+            w = float(row["partial_pct"]) / 100.0
+            pct += w * (float(row["partial_price"]) / entry - 1)
+            rem -= w
+        pct += rem * (float(row["exit_price"]) / entry - 1)
+        return round(pct * 100, 2)
+    except Exception:
+        return None
+
+
 with tab_log:
     closed = storage.get_trades(status="closed")
     if len(closed):
+        closed = closed.copy()
+        closed["kar_%"] = closed.apply(_trade_pct, axis=1)
         r = closed["r"].astype(float)
-        c1, c2, c3, c4 = st.columns(4)
+        pct = closed["kar_%"].astype(float)
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Kapanan", len(closed))
         c2.metric("İsabet", f"%{(r > 0).mean() * 100:.0f}")
-        c3.metric("Beklenti", f"{r.mean():+.2f}R")
-        c4.metric("Toplam", f"{r.sum():+.1f}R")
+        c3.metric("Ort. trade", f"%{pct.mean():+.2f}")
+        c4.metric("Toplam (eşit boyut)", f"%{pct.sum():+.1f}")
+        c5.metric("Toplam R", f"{r.sum():+.1f}R")
+        st.caption("Yüzdeler EŞİT pozisyon boyutu varsayımıyla — 'Toplam', trade "
+                   "yüzdelerinin basit toplamı (pozisyon başına eşit sermaye dilimi).")
+
+        # Haftalık özet
+        closed["hafta"] = pd.to_datetime(closed["closed_at"]).dt.strftime("%G-W%V")
+        wk = (closed.groupby("hafta")
+              .agg(n=("sym", "count"),
+                   isabet=("kar_%", lambda x: round((x > 0).mean() * 100)),
+                   ort_pct=("kar_%", lambda x: round(x.mean(), 2)),
+                   toplam_pct=("kar_%", lambda x: round(x.sum(), 1)),
+                   toplam_R=("r", lambda x: round(x.sum(), 1)))
+              .reset_index().sort_values("hafta", ascending=False))
+        wk.columns = ["Hafta", "Trade", "İsabet %", "Ort %", "Toplam %", "Toplam R"]
+        st.subheader("📅 Haftalık özet")
+        st.dataframe(wk, use_container_width=True, hide_index=True)
+
+        st.subheader("Tüm kayıtlar")
         st.dataframe(closed, use_container_width=True, hide_index=True)
-        st.bar_chart(r)
+        st.bar_chart(closed.set_index("sym")["kar_%"])
     else:
         st.info("Kapanmış trade yok.")
