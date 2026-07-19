@@ -206,6 +206,17 @@ with tab_live:
                     storage.close_position(row["id"], px, "manuel SAT")
                     st.toast(f"{s} kapatıldı @ {px:.2f}", icon="💰")
                     st.rerun(scope="fragment")
+        # ---- BUGUN KAPANANLAR (kalici serit — stop kacirilmasin) ----
+        closed = storage.get_trades(status="closed")
+        if len(closed):
+            today = str(date.today())
+            closed_today = closed[closed["closed_at"].astype(str).str[:10] == today]
+            if len(closed_today):
+                st.subheader("📕 Bugün kapananlar")
+                for _, r in closed_today.iterrows():
+                    icon = "🔴" if "stop" in str(r["exit_reason"]) else "💰"
+                    st.markdown(f"{icon} **{r['sym']}** — {r['exit_reason']} · "
+                                f"çıkış {r['exit_price']} · **R {r['r']:+.2f}**")
         st.caption(f"Son tazeleme: {time.strftime('%H:%M:%S')} · Stop otomatiği yalnızca "
                    "sayfa açıkken çalışır — asıl koruma broker'daki stop emrin.")
     live_frag()
