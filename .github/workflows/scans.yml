@@ -1,0 +1,25 @@
+name: luk-scans
+
+on:
+  schedule:
+    # NY 08:45 (pre-market) — EDT'de 12:45 UTC, EST'de 13:45 UTC; bekci dogrusunu secer
+    - cron: '45 12,13 * * 1-5'
+    # NY 16:10 (kapanis sonrasi / ertesi gun plani) — 20:10 veya 21:10 UTC
+    - cron: '10 20,21 * * 1-5'
+  workflow_dispatch: {}   # elle tetikleme (test icin)
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pandas numpy yfinance tradingview-screener supabase
+      - name: NY-saat bekcili tarama
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python .github/run_scan.py
