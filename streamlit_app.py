@@ -120,14 +120,32 @@ with tab_live:
 
     @st.fragment(run_every=REFRESH_SEC)
     def live_frag():
-        # ---- arka plan izleme (TV-oncelikli veri) ----
+        # ---- arka plan izleme (TV-oncelikli veri; SPY/QQQ endeks filtresi dahil) ----
+        IDX = ["SPY", "QQQ"]
         watch_syms = [c["sym"] for c in cands]
         pos = storage.get_trades(status="open")
         pos_syms = list(pos["sym"].unique()) if len(pos) else []
-        snaps, banner = get_live(sorted(set(watch_syms + pos_syms)))
+        snaps, banner = get_live(sorted(set(watch_syms + pos_syms + IDX)))
         banner()
         ctx_all = cached_daily(watch_syms) if watch_syms else {}
         orh_map = cached_orh(watch_syms, str(date.today())) if watch_syms else {}
+
+        # ---- ENDEKS FILTRESI (Luk 117:58 — dusen 21/50'ye bounce = fakeout bolgesi) ----
+        idx_ctx = cached_daily(tuple(IDX))
+        idx_warns = []
+        for ix in IDX:
+            sx, kx = snaps.get(ix), idx_ctx.get(ix)
+            if not sx or not kx:
+                continue
+            for nm, ev, down in (("21", kx["e21"], kx["e21_down"]),
+                                 ("50", kx["e50"], kx["e50_down"])):
+                if down and abs(sx["price"] / ev - 1) < 0.02:
+                    idx_warns.append(f"{ix} düşen EMA{nm} bölgesinde ({sx['price']:.0f} vs {ev:.0f})")
+        if idx_warns:
+            st.warning("🟠 **ENDEKS UYARISI:** " + " · ".join(idx_warns) +
+                       " — Luk bu bölgede iyi setup'ı bile pas geçer (fakeout alanı). KARAR: BORA")
+        else:
+            st.caption("🟢 Endeks temiz (SPY ✓ QQQ ✓ — düşen 21/50 bounce bölgesi yok)")
 
         # ---- SADECE "LUK ALIRDI" DURUMU: fiyat tetigin USTUNDE ----
         # (tetiklenip geri dusenler EKRANA GELMEZ — arka planda izlenir,
@@ -169,7 +187,7 @@ with tab_live:
             for c, snap in triggered:
                 price = snap["price"]
                 stop_now = compute_stop(price, snap["day_low"], c.get("max_stop_pct"))
-                durum = "🟢 [LUK: AL adayı]"
+                durum = "🟢 [LUK: AL adayı]" + (" ⚠ endeks" if idx_warns else "")
                 r = st.columns([1.2, 1.6, 1, 1, 1.6, 1, 0.9])
                 r[0].markdown(f"**{c['sym']}**")
                 r[1].write(c.get("setup", ""))

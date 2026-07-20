@@ -1,0 +1,3 @@
+OK: C:\Users\hodob\borahodo-daytrade\plans\plan_2026-07-20_premarket.json
+OK: C:\Users\hodob\borahodo-daytrade\plans\plan_2026-07-20_premarket.md
+EP aday: 2

@@ -130,10 +130,14 @@ def daily_context(symbols):
             c, v = d_hist["Close"], d_hist["Volume"]
             if len(c) < 55:
                 continue
+            e21s = c.ewm(span=21, adjust=False).mean()
+            e50s = c.ewm(span=50, adjust=False).mean()
             out[s] = dict(
                 e9=float(c.ewm(span=9, adjust=False).mean().iloc[-1]),
-                e21=float(c.ewm(span=21, adjust=False).mean().iloc[-1]),
-                e50=float(c.ewm(span=50, adjust=False).mean().iloc[-1]),
+                e21=float(e21s.iloc[-1]),
+                e50=float(e50s.iloc[-1]),
+                e21_down=bool(e21s.iloc[-1] < e21s.iloc[-6]),
+                e50_down=bool(e50s.iloc[-1] < e50s.iloc[-6]),
                 avgvol20=float(v.rolling(20).mean().iloc[-1]),
                 prev_close=float(c.iloc[-1]),
             )
