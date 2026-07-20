@@ -249,6 +249,27 @@ with tab_live:
                     st.error(f"🔴 {s}: fiyat stopa değdi ({row['stop']}) — kayıt otomatik "
                              "kapatıldı. Broker emrinin çalıştığını kontrol et!")
                     continue
+                # ---- OTOMATIK SATIS KATMANI (2026-07-20 Bora: 'TUT ve SAT'i kendisi
+                # yapsin, %100 Luk'a gore — sadece AL bende') ----
+                if rth and snap:
+                    px_now = snap["price"]
+                    # KLIMAKS: 4R+ ve gun >= +%8 ve hacim 2x -> hepsini guce sat (Luk 77:20)
+                    if "SAT_KLIMAKS" in stt["flags"]:
+                        storage.close_position(row["id"], px_now, "klimaks (otomatik)")
+                        st.warning(f"🟠 {s}: KLİMAKS — sistem tümünü {px_now:.2f}'den kapattı "
+                                   "(Luk: parabolik hacimde güce satış). Broker'da da sat!")
+                        continue
+                    # 3R TRIM: %30 guce sat, bir kez (Luk 41:00)
+                    if "SAT_3R_TRIM" in stt["flags"]:
+                        storage.partial_exit(row["id"], px_now, 30)
+                        st.warning(f"🟡 {s}: 3R — sistem %30'u {px_now:.2f}'den trimledi "
+                                   "(Luk kuralı). Broker'da da %30 sat!")
+                    # 9EMA: Luk'ta GUNLUK KAPANIS kurali -> kapanis penceresinde (15:45-16 ET)
+                    if "SAT_9EMA_ALTI" in stt["flags"] and engine._near_close_now():
+                        storage.close_position(row["id"], px_now, "9EMA kapanis (otomatik)")
+                        st.warning(f"🟡 {s}: kapanışa doğru günlük 9EMA altında — sistem "
+                                   f"{px_now:.2f}'den kapattı (Luk trailing). Broker'da da sat!")
+                        continue
                 r = st.columns([1.2, 1, 1, 1, 1, 2.2, 0.8, 0.8])
                 r[0].markdown(f"**{s}**")
                 r[1].write(f"{float(row['entry']):.2f}")

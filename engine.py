@@ -63,6 +63,15 @@ def _market_open_now():
     return et.weekday() < 5 and (9, 30) <= (et.hour, et.minute) < (16, 0)
 
 
+def _near_close_now():
+    """Kapanis penceresi (ET 15:45-16:00) — 9EMA cikisi Luk'ta GUNLUK KAPANIS kurali;
+    otomasyon bu pencerede degerlendirir (gun ortasi sarkmada erken satmasin)."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
+    et = datetime.now(ZoneInfo('America/New_York'))
+    return et.weekday() < 5 and (15, 45) <= (et.hour, et.minute) < (16, 0)
+
+
 def get_orh(symbols):
     """Acilistan sonra: gunun ILK 1-dakikalik mumunun high/low'u (Luk ORH tanimi).
     yfinance 1dk verisi ~1dk gecikmeli — acilisin ilk 2-3 dakikasinda ORH gec
