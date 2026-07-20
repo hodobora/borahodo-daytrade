@@ -156,23 +156,25 @@ with tab_live:
             st.caption("🔴 Piyasa kapalı — tetikler yalnızca normal seansta (15:30-22:00 CET) "
                        "değerlendirilir; pre/after-market fiyatı AL sinyali ÜRETMEZ (Luk kuralı). "
                        f"{len([c for c in cands if c.get('trigger')])} isim planda hazır bekliyor.")
+        # LUK KURALI (2026-07-20 Bora: "sadece Luk alacagi zaman ciksin"):
+        #  - Acilis tetigin ALTINDA/ESITINDE -> giris ani = PDH kirilimi
+        #  - Acilis tetigin USTUNDE (gap) -> PDH GECERSIZ; giris ani = ORH kirilimi
+        #    (Luk 38:18; ORH verisi henuz yoksa satir GOSTERILMEZ — erken dakikalar)
         triggered = []
         for c in cands if rth_open else []:
             snap = snaps.get(c["sym"])
-            if not snap:
+            trig = c.get("trigger")
+            if not snap or not trig:
                 continue
-            price = snap["price"]
-            levels = []
-            if c.get("trigger"):
-                levels.append(("5a PDH", float(c["trigger"])))
-            # 5b ORH: gap acilista (acilis > dun kapanis) ilk 1dk mumun high'i (Luk 38:18)
-            orh = orh_map.get(c["sym"])
-            ctx = ctx_all.get(c["sym"])
-            if orh and ctx and snap.get("day_open") and snap["day_open"] > ctx["prev_close"]:
-                levels.append(("5b ORH", round(orh["orh"], 2)))
-            crossed = [(nm, lv) for nm, lv in levels if price >= lv]
-            if crossed:
-                nm, lv = max(crossed, key=lambda x: x[1])  # kirilan en yuksek seviye esas
+            price, day_open = snap["price"], snap.get("day_open")
+            nm = lv = None
+            if day_open is not None and day_open > float(trig):
+                orh = orh_map.get(c["sym"])
+                if orh and price >= orh["orh"]:
+                    nm, lv = "5b ORH (gap)", round(orh["orh"], 2)
+            elif price >= float(trig):
+                nm, lv = "5a PDH", float(trig)
+            if nm:
                 c2 = dict(c); c2["setup"] = nm; c2["trigger"] = lv
                 triggered.append((c2, snap))
         if not triggered:
