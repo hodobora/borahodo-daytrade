@@ -63,6 +63,16 @@ def _market_open_now():
     return et.weekday() < 5 and (9, 30) <= (et.hour, et.minute) < (16, 0)
 
 
+def _flat_cut_window_now():
+    """Gun-sonu tasfiye penceresi (ET 15:30-15:50): ayni gun acilan ve hala
+    kararsiz pozisyonlar kesilir — Luk 27:13 'girdigim gun calismadiysa keserim'
+    kuralinin mekanik cevirisi (saat esigi bizim; Bora onayi 2026-07-20)."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
+    et = datetime.now(ZoneInfo('America/New_York'))
+    return et.weekday() < 5 and (15, 30) <= (et.hour, et.minute) < (15, 50)
+
+
 def _near_close_now():
     """Kapanis penceresi (ET 15:45-16:00) — 9EMA cikisi Luk'ta GUNLUK KAPANIS kurali;
     otomasyon bu pencerede degerlendirir (gun ortasi sarkmada erken satmasin)."""
