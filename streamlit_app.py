@@ -199,8 +199,9 @@ with tab_live:
                 r[5].write(f"{stop_now:.2f}")
                 if r[6].button("AL", key=f"al_{c['sym']}", type="primary",
                                disabled=c["sym"] in pos_syms):
+                    # gercek tetik kayda islenir (tasfiye kurali girise degil TETIGE bakar)
                     storage.open_position(c["sym"], price, stop_now,
-                                          note=c.get("setup", ""))
+                                          note=f"{c.get('setup','')}|trig={c.get('trigger')}")
                     st.toast(f"{c['sym']} kaydedildi: giriş {price:.2f}, stop {stop_now:.2f}. "
                              "Broker'a stop emrini girmeyi unutma!", icon="✅")
                     st.rerun(scope="fragment")
@@ -276,12 +277,20 @@ with tab_live:
                     # icin giris ≈ tetik). Tutunanlar yasina bakilmaksizin geceye gider;
                     # tetigin ALTINA sarkmis + kararsiz (-0.3<R<0) olan kesilir.
                     if engine._flat_cut_window_now() and not row.get("partial_price"):
-                        opened_et = pd.to_datetime(row["opened_at"], utc=True).tz_convert(
-                            "America/New_York").date()
-                        holding = px_now >= float(row["entry"])
-                        # monoton band (Bora 2026-07-20): tetik alti + stopa varmamis
-                        # HER ayni-gun pozisyon kesilir (0 > R > -1); stop kendi isini yapar
-                        if (opened_et == et_today() and not holding
+                        opened_ts = pd.to_datetime(row["opened_at"], utc=True)
+                        opened_et = opened_ts.tz_convert("America/New_York").date()
+                        age_min = (pd.Timestamp.now(tz="UTC") - opened_ts).total_seconds() / 60
+                        # GERCEK tetik (AL aninda nota islenir); yoksa giris vekil
+                        note = str(row.get("note") or "")
+                        ref = float(row["entry"])
+                        if "|trig=" in note:
+                            try:
+                                ref = float(note.split("|trig=")[-1])
+                            except Exception:
+                                pass
+                        holding = px_now >= ref
+                        # monoton band + min-yas 15dk (al-kes dongusu onlenir)
+                        if (opened_et == et_today() and age_min >= 15 and not holding
                                 and stt["r"] is not None and stt["r"] > -1):
                             storage.close_position(row["id"], px_now,
                                                    "gün sonu tasfiye (tetik altı, çalışmadı)")
