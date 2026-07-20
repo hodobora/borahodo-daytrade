@@ -270,17 +270,22 @@ with tab_live:
                         st.warning(f"🟡 {s}: kapanışa doğru günlük 9EMA altında — sistem "
                                    f"{px_now:.2f}'den kapattı (Luk trailing). Broker'da da sat!")
                         continue
-                    # GUN SONU TASFIYE (Luk 27:13 + Bora onayi 2026-07-20): ayni gun
-                    # acilmis, trim almamis ve hala kararsiz (|R|<0.3) -> kes
+                    # GUN SONU TASFIYE — C varyanti (Bora 2026-07-20): test yasa degil
+                    # DAVRANISA bakar. "Calisiyor" = fiyat tetiginin ustunde tutunuyor
+                    # (tetik kayitta yok; giris fiyati vekil — AL tetik aninda basildigi
+                    # icin giris ≈ tetik). Tutunanlar yasina bakilmaksizin geceye gider;
+                    # tetigin ALTINA sarkmis + kararsiz (-0.3<R<0) olan kesilir.
                     if engine._flat_cut_window_now() and not row.get("partial_price"):
                         opened_et = pd.to_datetime(row["opened_at"], utc=True).tz_convert(
                             "America/New_York").date()
-                        if opened_et == et_today() and stt["r"] is not None and abs(stt["r"]) < 0.3:
+                        holding = px_now >= float(row["entry"])
+                        if (opened_et == et_today() and not holding
+                                and stt["r"] is not None and abs(stt["r"]) < 0.3):
                             storage.close_position(row["id"], px_now,
-                                                   "gün sonu tasfiye (çalışmadı)")
-                            st.info(f"✂️ {s}: gün bitti, karar veremedi (R {stt['r']:+.2f}) — "
-                                    f"{px_now:.2f}'den tasfiye (Luk: 'girdiğim gün çalışmadıysa "
-                                    "keserim'). Broker'da da kapat!")
+                                                   "gün sonu tasfiye (tetik altı, çalışmadı)")
+                            st.info(f"✂️ {s}: kapanışa giderken tetiğinin altında ve kararsız "
+                                    f"(R {stt['r']:+.2f}) — {px_now:.2f}'den tasfiye "
+                                    "(Luk 27:13). Broker'da da kapat!")
                             continue
                 r = st.columns([1.2, 1, 1, 1, 1, 2.2, 0.8, 0.8])
                 r[0].markdown(f"**{s}**")
