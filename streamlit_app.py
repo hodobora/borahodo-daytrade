@@ -279,8 +279,10 @@ with tab_live:
                         opened_et = pd.to_datetime(row["opened_at"], utc=True).tz_convert(
                             "America/New_York").date()
                         holding = px_now >= float(row["entry"])
+                        # monoton band (Bora 2026-07-20): tetik alti + stopa varmamis
+                        # HER ayni-gun pozisyon kesilir (0 > R > -1); stop kendi isini yapar
                         if (opened_et == et_today() and not holding
-                                and stt["r"] is not None and abs(stt["r"]) < 0.3):
+                                and stt["r"] is not None and stt["r"] > -1):
                             storage.close_position(row["id"], px_now,
                                                    "gün sonu tasfiye (tetik altı, çalışmadı)")
                             st.info(f"✂️ {s}: kapanışa giderken tetiğinin altında ve kararsız "
