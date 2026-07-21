@@ -162,6 +162,11 @@ with tab_live:
         #    (Luk 38:18; ORH verisi henuz yoksa satir GOSTERILMEZ — erken dakikalar)
         triggered = []
         for c in cands if rth_open else []:
+            # LUK SKORU kapisi (2026-07-21 Bora onayi): sadece skor>=3 ekrana gelir,
+            # gerisi arka planda bekler — ertesi aksam taramasinda skoru yukselirse gelir.
+            # (skor'suz eski plan uyumu: skor alani yoksa satir gizlenmez)
+            if c.get("skor") is not None and c["skor"] < 3:
+                continue
             snap = snaps.get(c["sym"])
             trig = c.get("trigger")
             if not snap or not trig:
@@ -179,7 +184,8 @@ with tab_live:
                 triggered.append((c2, snap))
         if not triggered:
             n = len([c for c in cands if c.get("trigger")])
-            st.caption(f"Tetik yok — {n} isim arka planda izleniyor · "
+            nf = len([c for c in cands if c.get("trigger") and (c.get("skor") is None or c["skor"] >= 3)])
+            st.caption(f"Tetik yok — {n} isim arka planda izleniyor ({nf} odakta, SKOR ≥3) · "
                        f"son tazeleme {time.strftime('%H:%M:%S')} (her {REFRESH_SEC} sn)")
         else:
             h = st.columns([1.2, 1.6, 1, 1, 1.6, 1, 0.9])
@@ -189,7 +195,9 @@ with tab_live:
             for c, snap in triggered:
                 price = snap["price"]
                 stop_now = compute_stop(price, snap["day_low"], c.get("max_stop_pct"))
-                durum = "🟢 [LUK: AL adayı]" + (" ⚠ endeks" if idx_warns else "")
+                sk = c.get("skor")
+                durum = ("🟢 [LUK: AL adayı" + (f" — SKOR {sk}/4" if sk is not None else "") + "]"
+                         + (" ⚠ endeks" if idx_warns else ""))
                 r = st.columns([1.2, 1.6, 1, 1, 1.6, 1, 0.9])
                 r[0].markdown(f"**{c['sym']}**")
                 r[1].write(c.get("setup", ""))

@@ -108,9 +108,45 @@ def refine_daily(symbols):
     return out
 
 
+def rs_universe_threshold(pct=0.96):
+    """Genis likit evrenin (volatilite filtresiz) Perf.1M %96 esigi — LUK SKORU
+    RS kriteri backtest'te bu evrene gore olculdu (luk_skoru_backtest_2026-07-21.md)."""
+    from tradingview_screener import Query, col
+    try:
+        q = (Query().select('name', 'Perf.1M')
+             .where(col('exchange').isin(['NASDAQ', 'NYSE', 'AMEX']),
+                    col('type') == 'stock', col('is_primary') == True,
+                    col('close') > PRICE_MIN,
+                    col('market_cap_basic') > MKTCAP_MIN,
+                    col('average_volume_30d_calc') > AVGVOL_MIN)
+             .order_by('Value.Traded', ascending=False).limit(2000))
+        _, u = q.get_scanner_data()
+        s = u['Perf.1M'].dropna()
+        return float(s.quantile(pct)) if len(s) > 300 else None
+    except Exception:
+        return None
+
+
+def luk_skor(cands, rs_thr):
+    """LUK SKORU 0-4 (2026-07-21 Bora onayi; kriterler backtest-dogrulamali,
+    luk_skoru_backtest_2026-07-21.md): RS>=p96, ADR 6-10, 3M bacak 30-80, tema 2-4.
+    Portal ana ekrani sadece skor>=3 tetiklenenleri gosterir."""
+    from collections import Counter
+    sec_n = Counter(c.get("sector", "") for c in cands)
+    for c in cands:
+        p3 = c.get("perf3m")
+        crit = [
+            rs_thr is not None and c.get("perf1m") is not None and c["perf1m"] >= rs_thr,
+            6.0 <= (c.get("adr_pct") or 0) <= 10.0,
+            p3 is not None and 30.0 <= p3 <= 80.0,
+            2 <= sec_n[c.get("sector", "")] <= 4,
+        ]
+        c["skor"] = int(sum(crit))
+
+
 def evening():
     """Aksam taramasi: yarinin 5a/5c adaylari + Leading watchlist saglik sayisi."""
-    df = broad_scan()
+    df = broad_scan(extra_cols=("Perf.3M",))
     leaders = df[df["Perf.1M"] >= RS_1M_MIN]
     info = refine_daily(sorted(leaders["sym"].unique()))
     plan = dict(kind="evening", created=str(datetime.now()), for_day=target_trading_day("evening"),
@@ -140,9 +176,12 @@ def evening():
             zone=None if trigger else f"{k['e21']:.2f}-{k['e9']:.2f}",
             stop_ref=round(stop_ref, 2), adr_pct=round(k["adr"] * 100, 1),
             max_stop_pct=round(max_stop * 100, 1),
-            perf1m=round(float(r["Perf.1M"]), 1), rvol_yesterday=round(k["rvol"], 2),
+            perf1m=round(float(r["Perf.1M"]), 1),
+            perf3m=round(float(r["Perf.3M"]), 1) if not math.isnan(float(r.get("Perf.3M") or float("nan"))) else None,
+            rvol_yesterday=round(k["rvol"], 2),
         ))
     plan["candidates"].sort(key=lambda x: -x["perf1m"])
+    luk_skor(plan["candidates"], rs_universe_threshold())
     save(plan)
 
 
@@ -188,10 +227,10 @@ def save(plan):
     if kind == "evening":
         lines.append(f"Leading watchlist: {plan['leading_count']} isim (piyasa termometresi)")
         lines.append("")
-        lines.append("| # | Sembol | Setup | Tetik | Bolge | Stop ref | ADR% | Max stop% | 1M% |")
-        lines.append("|---|---|---|---|---|---|---|---|---|")
+        lines.append("| # | Sembol | SKOR | Setup | Tetik | Bolge | Stop ref | ADR% | Max stop% | 1M% |")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|")
         for i, c in enumerate(plan["candidates"], 1):
-            lines.append(f"| {i} | {c['sym']} | {c['setup']} | {c['trigger'] or '-'} | "
+            lines.append(f"| {i} | {c['sym']} | {c.get('skor', '-')}/4 | {c['setup']} | {c['trigger'] or '-'} | "
                          f"{c['zone'] or '-'} | {c['stop_ref']} | {c['adr_pct']} | "
                          f"{c['max_stop_pct']} | {c['perf1m']} |")
         lines += ["", "## TV ALARM LISTESI (kur ve yat)",
