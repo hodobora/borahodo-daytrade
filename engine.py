@@ -63,6 +63,19 @@ def _market_open_now():
     return et.weekday() < 5 and (9, 30) <= (et.hour, et.minute) < (16, 0)
 
 
+def session_local_str():
+    """NY 09:30-16:00 seansini Bora'nin saatine (Amsterdam) cevirip yazar.
+    ABD ve Avrupa DST'yi farkli tarihlerde degistirdigi icin yilda ~4 hafta
+    fark 5 saate duser — sabit '15:30-22:00' etiketi o donem yanlis olurdu."""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
+    ny, ams = ZoneInfo('America/New_York'), ZoneInfo('Europe/Amsterdam')
+    today = datetime.now(ny).date()
+    o = datetime(today.year, today.month, today.day, 9, 30, tzinfo=ny).astimezone(ams)
+    c = datetime(today.year, today.month, today.day, 16, 0, tzinfo=ny).astimezone(ams)
+    return f"{o:%H:%M}-{c:%H:%M} {c:%Z}"
+
+
 def _flat_cut_window_now():
     """Gun-sonu tasfiye penceresi (ET 15:30-15:50): ayni gun acilan ve hala
     kararsiz pozisyonlar kesilir — Luk 27:13 'girdigim gun calismadiysa keserim'

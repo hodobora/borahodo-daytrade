@@ -153,7 +153,7 @@ with tab_live:
         st.subheader("⚡ Tetiklenenler")
         rth_open = engine._market_open_now()
         if not rth_open:
-            st.caption("🔴 Piyasa kapalı — tetikler yalnızca normal seansta (15:30-22:00 CET) "
+            st.caption(f"🔴 Piyasa kapalı — tetikler yalnızca normal seansta ({engine.session_local_str()}) "
                        "değerlendirilir; pre/after-market fiyatı AL sinyali ÜRETMEZ (Luk kuralı). "
                        f"{len([c for c in cands if c.get('trigger')])} isim planda hazır bekliyor.")
         # LUK KURALI (2026-07-20 Bora: "sadece Luk alacagi zaman ciksin"):
