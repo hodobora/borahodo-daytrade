@@ -60,8 +60,8 @@ now = datetime.now(ET)
 durum = "🟢 PİYASA AÇIK" if market_open_now() else "🔴 PİYASA KAPALI"
 st.title("🎡 borahodo-wheel — Opsiyon Satış Paneli")
 st.caption(f"NY: {GUN_TR[now.weekday()]} {now.strftime('%d %b %H:%M')} · {durum} · "
-           f"Depo: {wheel_store.backend_name()} · Veri: yfinance ~15dk gecikmeli · "
-           "KARAR: BORA · Emirler IBKR'den")
+           f"Depo: {wheel_store.backend_name()} · Veri: TradingView CANLI "
+           "(oturum düşerse yfinance ~15dk) · KARAR: BORA · Emirler IBKR'den")
 
 if wheel_store.LAST_ERROR:
     with st.expander("⚠️ Kalıcı depo kurulu değil — kayıtlar geçici! (kurulum: 60 saniye)", expanded=False):
@@ -91,6 +91,14 @@ elif oran > 60:
 
 # ---------- POZISYONLAR (ana ekran) ----------
 def current_mid(sym, expiry, strike, kind):
+    # once TradingView canli, olmazsa yfinance (15dk gecikmeli)
+    try:
+        import tv_options
+        m = tv_options.quote(sym, expiry, strike, kind)
+        if m is not None:
+            return m
+    except Exception:
+        pass
     try:
         import yfinance as yf
         ch = yf.Ticker(sym).option_chain(str(expiry))
