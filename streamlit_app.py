@@ -91,10 +91,14 @@ with tab_scan:
     st.info("Kural hatırlatma: bilanço pencerede olan vade atlanır · sadece taşımaya razı "
             "olduğun hissede sat · limit emir, asla market · kırmızı gün = put satış günü.")
 
+    open_syms = set(open_pos["sym"]) if len(open_pos) else set()
+    st.caption(f"Serbest nakit (tarama filtresi): ${max(cash - used_collateral, 0):,.0f} "
+               f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'}")
     if st.button("🔍 TARA", type="primary", use_container_width=True):
         with st.spinner(f"{len(universe)} sembol taranıyor (~1-2 dk)..."):
+            free_cash = max(cash - used_collateral, 0)
             df, notes = wheel_scan.scan(
-                universe, cash * 1.0,
+                universe, free_cash,
                 delta_lo=-delta_band[1], delta_hi=-delta_band[0],
                 dte_lo=dte[0], dte_hi=dte[1],
                 max_spread=max_spread, min_oi=min_oi)
@@ -114,9 +118,10 @@ with tab_scan:
             ivr = wheel_store.get_iv_rank(r.sym, r.atm_iv) if r.atm_iv else None
             ivr_txt = f" · IVR~{ivr}" if ivr is not None else ""
             renk = "🟢" if r.skor > 2 else "🟡"
+            dup = " · 🔁 BU İSİMDE AÇIK POZİSYONUN VAR — üst üste bindirme" if r.sym in open_syms else ""
             with st.container(border=True):
                 a, b = st.columns([3, 2])
-                a.markdown(f"**{renk} {r.sym}** ${r.spot} · `{r.order}`")
+                a.markdown(f"**{renk} {r.sym}** ${r.spot} · `{r.order}`{dup}")
                 a.caption(f"getiri %{r.yield_pct} / {r.dte}g (haftalık %{r.wk_yield}) · "
                           f"Δ{r.delta} · IV {r.iv:.0%} / RV {r.rv20:.0%} (×{r.iv_rv}){ivr_txt}")
                 b.caption(f"teminat ${r.collateral:,} · başabaş ${r.breakeven} · "
