@@ -91,12 +91,12 @@ elif oran > 60:
 
 # ---------- POZISYONLAR (ana ekran) ----------
 def current_mid(sym, expiry, strike, kind):
-    # once TradingView canli, olmazsa yfinance (15dk gecikmeli)
+    """(mid, kaynak) dondurur: ('tv' canli | 'yf' ~15dk gecikmeli | None)."""
     try:
         import tv_options
         m = tv_options.quote(sym, expiry, strike, kind)
         if m is not None:
-            return m
+            return m, "tv"
     except Exception:
         pass
     try:
@@ -107,10 +107,10 @@ def current_mid(sym, expiry, strike, kind):
         if len(row):
             bid, ask = float(row["bid"].iloc[0]), float(row["ask"].iloc[0])
             if bid > 0 or ask > 0:
-                return round((bid + ask) / 2, 2)
-        return None
+                return round((bid + ask) / 2, 2), "yf"
+        return None, None
     except Exception:
-        return None
+        return None, None
 
 
 st.subheader("📌 Pozisyonlar")
@@ -167,7 +167,7 @@ def verdict(kind, spot, strike, prog):
 
 
 for r in open_pos.itertuples():
-    mid = current_mid(r.sym, r.expiry, r.strike, r.kind)
+    mid, mid_src = current_mid(r.sym, r.expiry, r.strike, r.kind)
     spot = spot_price(r.sym)
     fill = float(r.fill or 0)
     prog = max(0.0, min(1.0, 1 - mid / fill)) if (mid is not None and fill) else None
@@ -199,10 +199,17 @@ for r in open_pos.itertuples():
         if r.kind == "CC" and used_collateral < cash:
             a.caption("💡 Kıskaç: hisse taşırken boşta nakit varsa aynı isimde OTM PUT da "
                       "satılabilir (çift taraflı prim — teminatlı strangle).")
+        if mid is not None and mid_src == "yf":
+            b.error("⚠️ CANLI VERİ YOK — TradingView oturumu düşmüş, fiyat yfinance "
+                    "~15dk gecikmeli. Secrets'ta TV_SESSIONID'yi yenile!")
         if prog is not None:
-            b.progress(prog, text=f"kâr %{prog*100:.0f} (güncel ${mid:.2f})")
+            mtm = (fill - mid) * 100 * abs(int(r.qty or 1))
+            src_txt = "canlı" if mid_src == "tv" else "~15dk"
+            b.progress(prog, text=f"%75 hedefe ilerleme (hedef ${fill*0.25:.2f})")
+            b.markdown(f"güncel **${mid:.2f}** ({src_txt}) · MTM **{mtm:+.0f}$**"
+                       + (" — eksi = dalga, karar noktası değil" if mtm < 0 else ""))
         else:
-            b.caption("güncel opsiyon fiyatı alınamadı")
+            b.caption("güncel opsiyon fiyatı alınamadı (TV oturumu + yfinance ikisi de yanıtsız)")
         with c.popover("İşlem"):
             cp = st.number_input("Kapanış fiyatı ($)", 0.0, 999.0,
                                  float(mid or 0), 0.01, key=f"cp{r.id}")
