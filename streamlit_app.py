@@ -43,6 +43,13 @@ if not _gate():
     st.stop()
 
 
+# panel acikken 15 dk'da bir kendini yeniler (pozisyon fiyatlari/%75 barlari)
+try:
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=15 * 60 * 1000, key="auto15")
+except Exception:
+    pass
+
 # ---------- baslik + bekci seridi ----------
 def market_open_now():
     now = datetime.now(ET)
@@ -57,7 +64,15 @@ st.caption(f"NY: {GUN_TR[now.weekday()]} {now.strftime('%d %b %H:%M')} · {durum
            "KARAR: BORA · Emirler IBKR'den")
 
 if wheel_store.LAST_ERROR:
-    st.error(f"⛔ Depo hatasi — schema_wheel.sql calistirildi mi? ({wheel_store.LAST_ERROR[:90]})")
+    with st.expander("⚠️ Kalıcı depo kurulu değil — kayıtlar geçici! (kurulum: 60 saniye)", expanded=False):
+        st.markdown("1. [supabase.com](https://supabase.com) → projen → sol menü "
+                    "**SQL Editor** → **New query**  \n"
+                    "2. Aşağıyı yapıştır → **Run**  \n"
+                    "3. Bu paneli yenile — uyarı kalkar.")
+        try:
+            st.code(open("schema_wheel.sql", encoding="utf-8").read(), language="sql")
+        except Exception:
+            st.text("schema_wheel.sql repo kökünde")
 
 open_pos = wheel_store.get_wheel(status="open")
 used_collateral = float(open_pos["collateral"].fillna(0).sum()) if len(open_pos) else 0.0

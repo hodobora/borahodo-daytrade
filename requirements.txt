@@ -6,3 +6,4 @@ yfinance
 tradingview-screener
 supabase
 pyarrow
+streamlit-autorefresh
