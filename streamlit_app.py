@@ -85,8 +85,10 @@ with tab_scan:
         dte = p2.slider("Vade (gün)", 5, 35, (7, 24))
         max_spread = p3.slider("Max spread %", 3.0, 20.0, 10.0, 0.5)
         min_oi = p4.number_input("Min açık pozisyon (OI)", 0, 5000, 100, 50)
+        margin_mult = st.slider("Teminat çarpanı (1.0 = cash-secured · üstü = MARGIN/naked bölgesi)",
+                                1.0, 3.0, 1.0, 0.5)
         dyn = st.toggle("🌐 Dinamik evren — tüm ABD piyasası (TV screener: fiyat bandı + "
-                        "hacim>2M + mktcap>2B, volatiliteye göre ilk N)", value=False)
+                        "hacim>2M + mktcap>2B, volatiliteye göre ilk N)", value=True)
         top_n = st.slider("Dinamik evren boyutu (derin taranacak isim)", 20, 100, 50, 5,
                           disabled=not dyn)
         uni_text = st.text_area("Sabit evren (virgülle)", ", ".join(wheel_scan.UNIVERSE),
@@ -103,7 +105,11 @@ with tab_scan:
     st.caption(f"Serbest nakit (tarama filtresi): ${max(cash - used_collateral, 0):,.0f} "
                f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'}")
     if st.button("🔍 TARA", type="primary", use_container_width=True):
-        free_cash = max(cash - used_collateral, 0)
+        free_cash = max(cash - used_collateral, 0) * margin_mult
+        if margin_mult > 1.0:
+            st.error(f"🟥 MARGIN MODU ×{margin_mult:g} — bu taramadaki büyük kontratlar naked put "
+                     f"olur: assign anında strike×100 tutarı MARGIN BORCUYLA karşılanır. "
+                     "27 Temmuz'daki tabloyu hatırla. Boyutu sen seçtin.")
         if universe is None:
             with st.spinner("Aşama 1: TV screener ile tüm ABD piyasası eleniyor..."):
                 try:
