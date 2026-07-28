@@ -108,8 +108,37 @@ def current_mid(sym, expiry, strike, kind):
 st.subheader("📌 Pozisyonlar")
 if not len(open_pos):
     st.info("Açık pozisyon yok.")
+def spot_price(sym):
+    try:
+        import yfinance as yf
+        return float(yf.Ticker(sym).history(period="1d")["Close"].iloc[-1])
+    except Exception:
+        return None
+
+
+def verdict(kind, spot, strike, prog):
+    """Karar etiketi: KAPAT / TUT / SINIRDA / ITM. Stop yok — ITM'de bile kural TUT."""
+    if prog is not None and prog >= 0.75:
+        return "success", "✂️ KAPAT — %75 kâr doldu (GTC emrin yoksa buy-to-close gir)"
+    if spot is None:
+        return "caption", "spot alınamadı"
+    if kind == "CSP":
+        if spot < strike:
+            return "error", (f"🔴 ITM (spot ${spot:.2f} < strike) — assign muhtemel. "
+                             "Kural: panik satışı YOK, vadeye kadar TUT; assign olursa pazartesi CC")
+        if spot < strike * 1.03:
+            return "warning", f"🟠 SINIRDA — spot ${spot:.2f}, strike'a <%3. TUT ve izle"
+        return "success", f"🟢 TUT — spot ${spot:.2f}, plan çalışıyor"
+    else:  # CC
+        if spot > strike:
+            return "warning", (f"🟠 ITM (spot ${spot:.2f} > strike) — çağrılma muhtemel; "
+                               "hisse strike'tan gider, bu plan dahili. TUT")
+        return "success", f"🟢 TUT — spot ${spot:.2f}, prim eriyor lehine"
+
+
 for r in open_pos.itertuples():
     mid = current_mid(r.sym, r.expiry, r.strike, r.kind)
+    spot = spot_price(r.sym)
     fill = float(r.fill or 0)
     prog = max(0.0, min(1.0, 1 - mid / fill)) if (mid is not None and fill) else None
     dte_left = (pd.Timestamp(r.expiry).date() - date.today()).days if r.expiry else "?"
@@ -119,12 +148,12 @@ for r in open_pos.itertuples():
                    f"{'PUT' if r.kind == 'CSP' else 'CALL'}** × {r.qty}")
         a.caption(f"fill ${fill:.2f} · prim ${float(r.premium or 0):.0f} · "
                   f"başabaş ${float(r.strike) - fill:.2f} · vade {dte_left}g · {r.note or ''}")
+        level, msg = verdict(r.kind, spot, float(r.strike), prog)
+        getattr(a, level if level != "caption" else "caption")(msg)
         if prog is not None:
             b.progress(prog, text=f"kâr %{prog*100:.0f} (güncel ${mid:.2f})")
-            if prog >= 0.75:
-                b.success("✂️ %75 doldu — KAPAT (buy-to-close)")
         else:
-            b.caption("güncel fiyat alınamadı")
+            b.caption("güncel opsiyon fiyatı alınamadı")
         with c.popover("İşlem"):
             cp = st.number_input("Kapanış fiyatı ($)", 0.0, 999.0,
                                  float(mid or 0), 0.01, key=f"cp{r.id}")
