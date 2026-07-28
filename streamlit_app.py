@@ -206,7 +206,7 @@ for r in open_pos.itertuples():
             mtm = (fill - mid) * 100 * abs(int(r.qty or 1))
             src_txt = "canlı" if mid_src == "tv" else "~15dk"
             b.progress(prog, text=f"%75 hedefe ilerleme (hedef ${fill*0.25:.2f})")
-            b.markdown(f"güncel **${mid:.2f}** ({src_txt}) · MTM **{mtm:+.0f}$**"
+            b.markdown(f"güncel **\\${mid:.2f}** ({src_txt}) · MTM **{mtm:+.0f} USD**"
                        + (" — eksi = dalga, karar noktası değil" if mtm < 0 else ""))
         else:
             b.caption("güncel opsiyon fiyatı alınamadı (TV oturumu + yfinance ikisi de yanıtsız)")
