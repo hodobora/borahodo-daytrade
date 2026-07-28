@@ -74,7 +74,74 @@ if oran > 85:
 elif oran > 60:
     st.warning("⚠️ Teminat/nakit %60 üstü — tampon inceliyor.")
 
-tab_scan, tab_pos, tab_journal = st.tabs(["🔍 Tarama", "📌 Pozisyonlar", "📒 Journal"])
+# ---------- POZISYONLAR (ana ekran) ----------
+def current_mid(sym, expiry, strike, kind):
+    try:
+        import yfinance as yf
+        ch = yf.Ticker(sym).option_chain(str(expiry))
+        leg = ch.puts if kind == "CSP" else ch.calls
+        row = leg[leg["strike"] == float(strike)]
+        if len(row):
+            bid, ask = float(row["bid"].iloc[0]), float(row["ask"].iloc[0])
+            if bid > 0 or ask > 0:
+                return round((bid + ask) / 2, 2)
+        return None
+    except Exception:
+        return None
+
+
+st.subheader("📌 Pozisyonlar")
+if not len(open_pos):
+    st.info("Açık pozisyon yok.")
+for r in open_pos.itertuples():
+    mid = current_mid(r.sym, r.expiry, r.strike, r.kind)
+    fill = float(r.fill or 0)
+    prog = max(0.0, min(1.0, 1 - mid / fill)) if (mid is not None and fill) else None
+    dte_left = (pd.Timestamp(r.expiry).date() - date.today()).days if r.expiry else "?"
+    with st.container(border=True):
+        a, b, c = st.columns([3, 2, 2])
+        a.markdown(f"**{r.sym} {r.expiry} ${float(r.strike):g} "
+                   f"{'PUT' if r.kind == 'CSP' else 'CALL'}** × {r.qty}")
+        a.caption(f"fill ${fill:.2f} · prim ${float(r.premium or 0):.0f} · "
+                  f"başabaş ${float(r.strike) - fill:.2f} · vade {dte_left}g · {r.note or ''}")
+        if prog is not None:
+            b.progress(prog, text=f"kâr %{prog*100:.0f} (güncel ${mid:.2f})")
+            if prog >= 0.75:
+                b.success("✂️ %75 doldu — KAPAT (buy-to-close)")
+        else:
+            b.caption("güncel fiyat alınamadı")
+        with c.popover("İşlem"):
+            cp = st.number_input("Kapanış fiyatı ($)", 0.0, 999.0,
+                                 float(mid or 0), 0.01, key=f"cp{r.id}")
+            reason = st.selectbox("Sebep", ["closed_75", "expired", "assigned", "manual"],
+                                  key=f"rs{r.id}")
+            if st.button("Pozisyonu kapat", key=f"cl{r.id}"):
+                pnl = round((fill - cp) * 100 * abs(int(r.qty or 1)) - 1.55, 2)
+                wheel_store.close_wheel(r.id, cp, reason, pnl)
+                if reason == "assigned":
+                    st.toast(f"{r.sym} assign — pazartesi ~0.25Δ covered call planla!")
+                st.rerun()
+
+with st.expander("➕ Yeni pozisyon kaydet (IBKR'de fill olduktan sonra)"):
+    f1, f2, f3, f4, f5 = st.columns(5)
+    sym = f1.text_input("Sembol").upper()
+    kind = f2.selectbox("Tip", ["CSP", "CC"])
+    expiry = f3.date_input("Vade")
+    strike = f4.number_input("Strike", 0.0, 9999.0, 30.0, 0.5)
+    fill = f5.number_input("Fill ($)", 0.0, 999.0, 1.0, 0.01)
+    note = st.text_input("Not", "")
+    if st.button("Kaydet") and sym:
+        wheel_store.add_wheel(dict(
+            sym=sym, kind=kind, expiry=str(expiry), strike=strike, qty=-1,
+            fill=fill, premium=round(fill * 100, 2),
+            collateral=round(strike * 100, 2) if kind == "CSP" else 0,
+            note=note))
+        st.rerun()
+
+
+st.divider()
+tab_scan, tab_journal = st.tabs(["🔍 Tarama", "📒 Journal"])
+
 
 
 # ---------- TARAMA ----------
@@ -155,71 +222,6 @@ with tab_scan:
                 st.text(n)
     elif df is not None:
         st.warning("Aday çıkmadı — filtreleri gevşet veya nakiti kontrol et.")
-
-
-# ---------- POZISYONLAR ----------
-def current_mid(sym, expiry, strike, kind):
-    try:
-        import yfinance as yf
-        ch = yf.Ticker(sym).option_chain(str(expiry))
-        leg = ch.puts if kind == "CSP" else ch.calls
-        row = leg[leg["strike"] == float(strike)]
-        if len(row):
-            bid, ask = float(row["bid"].iloc[0]), float(row["ask"].iloc[0])
-            if bid > 0 or ask > 0:
-                return round((bid + ask) / 2, 2)
-        return None
-    except Exception:
-        return None
-
-
-with tab_pos:
-    if not len(open_pos):
-        st.info("Açık pozisyon yok.")
-    for r in open_pos.itertuples():
-        mid = current_mid(r.sym, r.expiry, r.strike, r.kind)
-        fill = float(r.fill or 0)
-        prog = max(0.0, min(1.0, 1 - mid / fill)) if (mid is not None and fill) else None
-        dte_left = (pd.Timestamp(r.expiry).date() - date.today()).days if r.expiry else "?"
-        with st.container(border=True):
-            a, b, c = st.columns([3, 2, 2])
-            a.markdown(f"**{r.sym} {r.expiry} ${float(r.strike):g} "
-                       f"{'PUT' if r.kind == 'CSP' else 'CALL'}** × {r.qty}")
-            a.caption(f"fill ${fill:.2f} · prim ${float(r.premium or 0):.0f} · "
-                      f"başabaş ${float(r.strike) - fill:.2f} · vade {dte_left}g · {r.note or ''}")
-            if prog is not None:
-                b.progress(prog, text=f"kâr %{prog*100:.0f} (güncel ${mid:.2f})")
-                if prog >= 0.75:
-                    b.success("✂️ %75 doldu — KAPAT (buy-to-close)")
-            else:
-                b.caption("güncel fiyat alınamadı")
-            with c.popover("İşlem"):
-                cp = st.number_input("Kapanış fiyatı ($)", 0.0, 999.0,
-                                     float(mid or 0), 0.01, key=f"cp{r.id}")
-                reason = st.selectbox("Sebep", ["closed_75", "expired", "assigned", "manual"],
-                                      key=f"rs{r.id}")
-                if st.button("Pozisyonu kapat", key=f"cl{r.id}"):
-                    pnl = round((fill - cp) * 100 * abs(int(r.qty or 1)) - 1.55, 2)
-                    wheel_store.close_wheel(r.id, cp, reason, pnl)
-                    if reason == "assigned":
-                        st.toast(f"{r.sym} assign — pazartesi ~0.25Δ covered call planla!")
-                    st.rerun()
-
-    with st.expander("➕ Yeni pozisyon kaydet (IBKR'de fill olduktan sonra)"):
-        f1, f2, f3, f4, f5 = st.columns(5)
-        sym = f1.text_input("Sembol").upper()
-        kind = f2.selectbox("Tip", ["CSP", "CC"])
-        expiry = f3.date_input("Vade")
-        strike = f4.number_input("Strike", 0.0, 9999.0, 30.0, 0.5)
-        fill = f5.number_input("Fill ($)", 0.0, 999.0, 1.0, 0.01)
-        note = st.text_input("Not", "")
-        if st.button("Kaydet") and sym:
-            wheel_store.add_wheel(dict(
-                sym=sym, kind=kind, expiry=str(expiry), strike=strike, qty=-1,
-                fill=fill, premium=round(fill * 100, 2),
-                collateral=round(strike * 100, 2) if kind == "CSP" else 0,
-                note=note))
-            st.rerun()
 
 
 # ---------- JOURNAL ----------
