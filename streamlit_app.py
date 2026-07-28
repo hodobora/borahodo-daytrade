@@ -85,8 +85,16 @@ with tab_scan:
         dte = p2.slider("Vade (gün)", 5, 35, (7, 24))
         max_spread = p3.slider("Max spread %", 3.0, 20.0, 10.0, 0.5)
         min_oi = p4.number_input("Min açık pozisyon (OI)", 0, 5000, 100, 50)
-        uni_text = st.text_area("Evren (virgülle)", ", ".join(wheel_scan.UNIVERSE), height=100)
-    universe = [s.strip().upper() for s in uni_text.split(",") if s.strip()]
+        dyn = st.toggle("🌐 Dinamik evren — tüm ABD piyasası (TV screener: fiyat bandı + "
+                        "hacim>2M + mktcap>2B, volatiliteye göre ilk N)", value=False)
+        top_n = st.slider("Dinamik evren boyutu (derin taranacak isim)", 20, 100, 50, 5,
+                          disabled=not dyn)
+        uni_text = st.text_area("Sabit evren (virgülle)", ", ".join(wheel_scan.UNIVERSE),
+                                height=100, disabled=dyn)
+    if dyn:
+        universe = None  # tarama aninda cekilir
+    else:
+        universe = [s.strip().upper() for s in uni_text.split(",") if s.strip()]
 
     st.info("Kural hatırlatma: bilanço pencerede olan vade atlanır · sadece taşımaya razı "
             "olduğun hissede sat · limit emir, asla market · kırmızı gün = put satış günü.")
@@ -95,8 +103,16 @@ with tab_scan:
     st.caption(f"Serbest nakit (tarama filtresi): ${max(cash - used_collateral, 0):,.0f} "
                f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'}")
     if st.button("🔍 TARA", type="primary", use_container_width=True):
-        with st.spinner(f"{len(universe)} sembol taranıyor (~1-2 dk)..."):
-            free_cash = max(cash - used_collateral, 0)
+        free_cash = max(cash - used_collateral, 0)
+        if universe is None:
+            with st.spinner("Aşama 1: TV screener ile tüm ABD piyasası eleniyor..."):
+                try:
+                    universe = wheel_scan.dynamic_universe(free_cash, top_n=top_n)
+                    st.caption(f"Dinamik evren ({len(universe)}): {', '.join(universe)}")
+                except Exception as ex:
+                    st.error(f"TV screener hatası: {ex} — sabit evrene dönüldü")
+                    universe = wheel_scan.UNIVERSE
+        with st.spinner(f"Aşama 2: {len(universe)} sembolün opsiyon zinciri taranıyor (~1-3 dk)..."):
             df, notes = wheel_scan.scan(
                 universe, free_cash,
                 delta_lo=-delta_band[1], delta_hi=-delta_band[0],

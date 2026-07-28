@@ -120,3 +120,22 @@ def scan(universe, cash, **kw):
                       - np.where(df["earn_flag"] != "", 2.0, 0))
         df = df.sort_values("skor", ascending=False).reset_index(drop=True)
     return df, notes
+
+
+def dynamic_universe(free_cash, min_avg_vol=2e6, min_mcap=2e9, top_n=50):
+    """TradingView screener ile tum ABD piyasasindan kaba eleme (asama 1).
+    Fiyat bandi serbest nakde gore: strike*100 <= nakit olabilmeli.
+    Opsiyonu olmayan isimler asama 2'de kendiliginden elenir."""
+    from tradingview_screener import Query, col
+    price_hi = max(min(free_cash / 100 * 1.15, 400), 12)
+    q = (Query().set_markets("america")
+         .select("name", "close", "Volatility.M")
+         .where(col("close").between(8, price_hi),
+                col("average_volume_10d_calc") > min_avg_vol,
+                col("market_cap_basic") > min_mcap,
+                col("type") == "stock",
+                col("is_primary") == True)
+         .order_by("Volatility.M", ascending=False)
+         .limit(top_n))
+    _, df = q.get_scanner_data()
+    return df["name"].tolist()
