@@ -118,6 +118,7 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
                     and (edate - today).days > 75 and ivrv > 1.1) else ""),
         breakeven=round(float(best["strike"]) - float(best["mid"]), 2),
         order=f"SELL 1 {tk} {str(exp)[:10]} {best['strike']:g}P @ limit {float(best['mid']):.2f}",
+        gtc_target=round(float(best["mid"]) * 0.25, 2),
         atm_iv=round(atm_iv, 3) if atm_iv else None,
         src=src,
     )

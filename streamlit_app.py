@@ -313,6 +313,9 @@ with tab_scan:
                 emir = (f"🚫 SATILMAZ — bilanço {r.earnings} pozisyon penceresinde "
                         f"(bilanço sonrası tekrar bak)") if r.earn_flag else f"`{r.order}`"
                 a.markdown(f"**{renk} {r.sym}** ${r.spot} · {emir}{dup}")
+                if not r.earn_flag:
+                    a.caption(f"✂️ satış dolunca hemen ekle → BUY 1 aynı kontrat "
+                              f"@ limit {getattr(r, 'gtc_target', 0):.2f} · TIF: GTC (%75 kuralı)")
                 a.caption(f"getiri %{r.yield_pct} / {r.dte}g (haftalık %{r.wk_yield}) · "
                           f"Δ{r.delta} · IV {r.iv:.0%} / RV {r.rv20:.0%} (×{r.iv_rv}){ivr_txt}")
                 crush = getattr(r, "crush_flag", "")
