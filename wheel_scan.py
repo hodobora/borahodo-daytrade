@@ -95,6 +95,10 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
         oi=int(best["openInterest"]), collateral=int(best["strike"] * 100),
         earnings=str(edate) if edate else "?",
         earn_flag="⚠️ bilanço pencerede" if earn_in_win else "",
+        # bir sonraki bilanço 75+ gün uzaktaysa bir önceki yeni geçmiş demektir (çeyrek ~91g):
+        # IV hâlâ şişkinse crush sonrası prim penceresi
+        crush_flag=("🎯 IV-crush penceresi" if (edate is not None
+                    and (edate - today).days > 75 and ivrv > 1.1) else ""),
         breakeven=round(float(best["strike"]) - float(best["mid"]), 2),
         order=f"SELL 1 {tk} {exp} {best['strike']:g}P @ limit {float(best['mid']):.2f}",
         atm_iv=round(float(iv.iloc[(K - S).abs().argmin()]), 3) if len(K) else None,
@@ -117,7 +121,8 @@ def scan(universe, cash, **kw):
     if not df.empty:
         df["skor"] = (df["iv_rv"].fillna(1) * 2 + df["wk_yield"] * 0.8
                       - df["spread_pct"] * 0.15
-                      - np.where(df["earn_flag"] != "", 2.0, 0))
+                      - np.where(df["earn_flag"] != "", 2.0, 0)
+                      + np.where(df.get("crush_flag", "") != "", 0.5, 0))
         df = df.sort_values("skor", ascending=False).reset_index(drop=True)
     return df, notes
 

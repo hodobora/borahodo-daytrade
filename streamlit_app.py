@@ -116,6 +116,28 @@ def spot_price(sym):
         return None
 
 
+def roll_quote(sym, strike, cur_expiry, kind):
+    """ITM + vadesi yakin pozisyon icin bir sonraki vadede ayni strike'in primi."""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(sym)
+        cur = pd.Timestamp(cur_expiry).date()
+        exps = [e for e in t.options
+                if 4 <= (pd.Timestamp(e).date() - cur).days <= 11]
+        if not exps:
+            return None
+        ne = exps[0]
+        ch = t.option_chain(ne)
+        leg = ch.puts if kind == "CSP" else ch.calls
+        row = leg[leg["strike"] == float(strike)]
+        if not len(row):
+            return None
+        mid = (float(row["bid"].iloc[0]) + float(row["ask"].iloc[0])) / 2
+        return ne, round(mid, 2)
+    except Exception:
+        return None
+
+
 def verdict(kind, spot, strike, prog):
     """Karar etiketi: KAPAT / TUT / SINIRDA / ITM. Stop yok — ITM'de bile kural TUT."""
     if prog is not None and prog >= 0.75:
@@ -150,6 +172,25 @@ for r in open_pos.itertuples():
                   f"başabaş ${float(r.strike) - fill:.2f} · vade {dte_left}g · {r.note or ''}")
         level, msg = verdict(r.kind, spot, float(r.strike), prog)
         getattr(a, level if level != "caption" else "caption")(msg)
+        # ROLL onerisi: ITM + vadeye <=3 gun
+        itm = spot is not None and ((r.kind == "CSP" and spot < float(r.strike))
+                                    or (r.kind == "CC" and spot > float(r.strike)))
+        if itm and isinstance(dte_left, int) and dte_left <= 3:
+            rq = roll_quote(r.sym, r.strike, r.expiry, r.kind)
+            if rq and mid is not None:
+                ne, nmid = rq
+                a.info(f"🔁 ROLL seçeneği: bu kontratı ~${mid:.2f}'e kapat, {ne} "
+                       f"${float(r.strike):g} aynı strike ~${nmid:.2f}'den sat → "
+                       f"net ~${nmid - mid:+.2f} kredi. Alternatif: assign kabul → CC. Karar: Bora")
+        # Erken kapama/roll ipucu: %60-75 arasi kar + vakit varsa
+        if prog is not None and 0.60 <= prog < 0.75 and isinstance(dte_left, int) and dte_left >= 4:
+            a.caption(f"💡 Erken kapama düşünülebilir: kârın %{prog*100:.0f}'i cepte, kalan "
+                      f"${mid:.2f} için {dte_left} gün beklemek şart değil — kapat, "
+                      "uygun günde yeni vade sat (yeşil gün CALL, kırmızı gün PUT).")
+        # Kiskac hatirlatmasi: CC tasirken nakit varsa ayni isimde CSP
+        if r.kind == "CC" and used_collateral < cash:
+            a.caption("💡 Kıskaç: hisse taşırken boşta nakit varsa aynı isimde OTM PUT da "
+                      "satılabilir (çift taraflı prim — teminatlı strangle).")
         if prog is not None:
             b.progress(prog, text=f"kâr %{prog*100:.0f} (güncel ${mid:.2f})")
         else:
@@ -259,8 +300,10 @@ with tab_scan:
                 a.markdown(f"**{renk} {r.sym}** ${r.spot} · {emir}{dup}")
                 a.caption(f"getiri %{r.yield_pct} / {r.dte}g (haftalık %{r.wk_yield}) · "
                           f"Δ{r.delta} · IV {r.iv:.0%} / RV {r.rv20:.0%} (×{r.iv_rv}){ivr_txt}")
+                crush = getattr(r, "crush_flag", "")
                 b.caption(f"teminat ${r.collateral:,} · başabaş ${r.breakeven} · "
-                          f"spread %{r.spread_pct} · OI {r.oi} · bilanço {r.earnings} {r.earn_flag}")
+                          f"spread %{r.spread_pct} · OI {r.oi} · bilanço {r.earnings} "
+                          f"{r.earn_flag} {crush}")
         with st.expander("Elenenler"):
             for n in st.session_state.get("scan_notes", []):
                 st.text(n)
