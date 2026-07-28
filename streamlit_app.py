@@ -139,11 +139,13 @@ with tab_scan:
         for r in df.itertuples():
             ivr = wheel_store.get_iv_rank(r.sym, r.atm_iv) if r.atm_iv else None
             ivr_txt = f" · IVR~{ivr}" if ivr is not None else ""
-            renk = "🟢" if r.skor > 2 else "🟡"
+            renk = "🔴" if r.earn_flag else ("🟢" if r.skor > 2 else "🟡")
             dup = " · 🔁 BU İSİMDE AÇIK POZİSYONUN VAR — üst üste bindirme" if r.sym in open_syms else ""
             with st.container(border=True):
                 a, b = st.columns([3, 2])
-                a.markdown(f"**{renk} {r.sym}** ${r.spot} · `{r.order}`{dup}")
+                emir = (f"🚫 SATILMAZ — bilanço {r.earnings} pozisyon penceresinde "
+                        f"(bilanço sonrası tekrar bak)") if r.earn_flag else f"`{r.order}`"
+                a.markdown(f"**{renk} {r.sym}** ${r.spot} · {emir}{dup}")
                 a.caption(f"getiri %{r.yield_pct} / {r.dte}g (haftalık %{r.wk_yield}) · "
                           f"Δ{r.delta} · IV {r.iv:.0%} / RV {r.rv20:.0%} (×{r.iv_rv}){ivr_txt}")
                 b.caption(f"teminat ${r.collateral:,} · başabaş ${r.breakeven} · "
