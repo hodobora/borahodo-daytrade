@@ -222,6 +222,38 @@ for r in open_pos.itertuples():
                     st.toast(f"{r.sym} assign — pazartesi ~0.25Δ covered call planla!")
                 st.rerun()
 
+with st.expander("🔧 Assign sonrası: Covered Call önerici (elinde 100+ hisse varken)"):
+    cc1, cc2, cc3 = st.columns(3)
+    cc_sym = cc1.text_input("Sembol (elindeki hisse)", key="ccsym").upper()
+    cc_cost = cc2.number_input("Efektif maliyet ($/hisse)", 0.0, 9999.0, 0.0, 0.01, key="cccost",
+                               help="strike − alınan prim; örn. APLD assign olursa 23.86")
+    cc_dte = cc3.slider("Vade (gün)", 5, 30, (7, 21), key="ccdte")
+    if st.button("📞 CALL adaylarını getir") and cc_sym:
+        cc_spot = spot_price(cc_sym)
+        try:
+            import tv_options
+            ccdf = tv_options.chain(cc_sym, "call", cc_dte[0], cc_dte[1])
+        except Exception:
+            ccdf = None
+        if ccdf is None or not len(ccdf) or cc_spot is None:
+            st.warning("Zincir/spot alınamadı — TV oturumunu kontrol et.")
+        else:
+            ccdf = ccdf[(ccdf["delta"] >= 0.15) & (ccdf["delta"] <= 0.35)]
+            ccdf = ccdf[ccdf["spread_pct"] <= 12]
+            if not len(ccdf):
+                st.warning("0.15-0.35 delta bandında uygun call yok — yeşil bir günü bekle.")
+            for cr in ccdf.sort_values("delta", ascending=False).head(5).itertuples():
+                cdte = (cr.expiry - date.today()).days
+                cyield = cr.mid / cc_spot * 100
+                warn = (" · 🚨 STRIKE MALİYETİN ALTINDA — çağrılırsan hissede zarar "
+                        "kilitlenir, bu strike'ı yazma!" if cc_cost and cr.strike < cc_cost else "")
+                st.markdown(f"`SELL 1 {cc_sym} {cr.expiry} {cr.strike:g}C @ limit {cr.mid:.2f}` "
+                            f"· Δ{cr.delta:.2f} · %{cyield:.2f}/{cdte}g · spread %{cr.spread_pct:.1f}"
+                            + warn)
+                st.caption(f"   ✂️ dolunca ekle → BUY 1 aynı kontrat @ limit {cr.mid*0.25:.2f} · GTC")
+            st.info("Kural: yeşil günde sat (primler şişkinken) · maliyetin altına strike yazma · "
+                    "satınca panele 'Tip: CC' olarak kaydet.")
+
 with st.expander("➕ Yeni pozisyon kaydet (IBKR'de fill olduktan sonra)"):
     f1, f2, f3, f4, f5 = st.columns(5)
     sym = f1.text_input("Sembol").upper()
