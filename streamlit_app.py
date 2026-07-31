@@ -166,7 +166,54 @@ def verdict(kind, spot, strike, prog):
         return "success", f"🟢 TUT — spot ${spot:.2f}, prim eriyor lehine"
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def cc_suggest(sym):
+    """Eldeki hisse icin 0.15-0.35 delta call adaylari (TV canli, 15dk cache)."""
+    try:
+        import tv_options
+        df = tv_options.chain(sym, "call", 7, 21)
+        if df is None:
+            return []
+        df = df[(df["delta"] >= 0.15) & (df["delta"] <= 0.35) & (df["spread_pct"] <= 12)]
+        return [dict(expiry=str(x.expiry), strike=float(x.strike), mid=float(x.mid),
+                     delta=float(x.delta), spread=float(x.spread_pct))
+                for x in df.sort_values("delta", ascending=False).head(3).itertuples()]
+    except Exception:
+        return []
+
+
 for r in open_pos.itertuples():
+    if r.kind == "STOCK":
+        # --- 2. vites: elde hisse karti — CC adaylari otomatik ---
+        spot = spot_price(r.sym)
+        cost = float(r.fill or 0)
+        with st.container(border=True):
+            a, b = st.columns([2, 3])
+            a.markdown(f"**📦 {int(r.qty or 100)} {r.sym} hisse** · maliyet ${cost:.2f}")
+            if spot:
+                stk_pnl = (spot - cost) * int(r.qty or 100)
+                a.caption(f"spot \\${spot:.2f} · hisse P&L {stk_pnl:+.0f} USD · {r.note or ''}")
+            if spot is not None and spot < cost:
+                a.warning(f"🟠 spot maliyetin altında — CC yazarken strike ≥ ${cost:.2f} olsun "
+                          "(altına yazarsan çağrılınca zarar kilitlenir)")
+            else:
+                a.success("🟢 CC satmaya uygun — yeşil günde sat")
+            b.markdown("**📞 Güncel CC adayları** (0.15-0.35Δ, canlı):")
+            sugg = cc_suggest(r.sym)
+            if not sugg:
+                b.caption("şu an bantta aday yok / zincir alınamadı")
+            for sg in sugg:
+                flag = " 🚨 maliyet altı!" if sg["strike"] < cost else ""
+                b.markdown(f"`SELL 1 {r.sym} {sg['expiry']} {sg['strike']:g}C @ limit "
+                           f"{sg['mid']:.2f}` · Δ{sg['delta']:.2f}{flag}")
+            with st.popover("İşlem (hisse satıldı/çağrıldı)"):
+                sp_ = st.number_input("Satış fiyatı ($/hisse)", 0.0, 9999.0,
+                                      float(spot or cost), 0.01, key=f"sp{r.id}")
+                if st.button("Hisse kartını kapat", key=f"sc{r.id}"):
+                    pnl = round((sp_ - cost) * int(r.qty or 100), 2)
+                    wheel_store.close_wheel(r.id, sp_, "stock_sold", pnl)
+                    st.rerun()
+        continue
     mid, mid_src = current_mid(r.sym, r.expiry, r.strike, r.kind)
     spot = spot_price(r.sym)
     fill = float(r.fill or 0)
@@ -218,8 +265,19 @@ for r in open_pos.itertuples():
             if st.button("Pozisyonu kapat", key=f"cl{r.id}"):
                 pnl = round((fill - cp) * 100 * abs(int(r.qty or 1)) - 1.55, 2)
                 wheel_store.close_wheel(r.id, cp, reason, pnl)
-                if reason == "assigned":
-                    st.toast(f"{r.sym} assign — pazartesi ~0.25Δ covered call planla!")
+                if reason == "assigned" and r.kind == "CSP":
+                    # hisse otomatik olarak ayri kart olarak acilir (2. vites)
+                    eff = round(float(r.strike) - fill, 2)
+                    wheel_store.add_wheel(dict(
+                        sym=r.sym, kind="STOCK", expiry=None, strike=float(r.strike),
+                        qty=100, fill=eff, premium=0,
+                        collateral=round(float(r.strike) * 100, 2),
+                        note=f"assign kaynağı: {r.expiry} {float(r.strike):g}P"))
+                    st.toast(f"{r.sym}: 100 hisse kartı açıldı (maliyet ${eff}) — "
+                             "CC adayları kartın içinde!")
+                elif reason == "assigned" and r.kind == "CC":
+                    st.toast(f"{r.sym} hisseler çağrıldı — STOCK kartını da kapat "
+                             f"(satış fiyatı = strike).")
                 st.rerun()
 
 with st.expander("🔧 Assign sonrası: Covered Call önerici (elinde 100+ hisse varken)"):
