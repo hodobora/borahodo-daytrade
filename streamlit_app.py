@@ -78,8 +78,12 @@ open_pos = wheel_store.get_wheel(status="open")
 used_collateral = float(open_pos["collateral"].fillna(0).sum()) if len(open_pos) else 0.0
 
 c1, c2, c3, c4 = st.columns(4)
-cash = c1.number_input("Hesap nakiti ($)", min_value=0, value=int(st.session_state.get("cash", 5100)), step=100)
+stored_cash = wheel_store.get_cash()
+cash = c1.number_input("Hesap nakiti ($)", min_value=0,
+                       value=int(st.session_state.get("cash", stored_cash)), step=100)
 st.session_state["cash"] = cash
+if cash != stored_cash:
+    wheel_store.set_cash(cash)  # kalici — her cihazda ayni deger acilir
 c2.metric("Kullanılan teminat", f"${used_collateral:,.0f}")
 oran = used_collateral / cash * 100 if cash else 0
 c3.metric("Teminat / nakit", f"%{oran:.0f}")

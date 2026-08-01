@@ -133,5 +133,40 @@ def get_iv_rank(sym, current_iv):
     return round(float((vals < current_iv).mean() * 100))
 
 
+def get_cash(default=5100):
+    """Panel 'hesap nakiti' degeri — kalici (plans tablosu, kind=panel_settings)."""
+    sb = _sb()
+    if sb:
+        try:
+            d = (sb.table("plans").select("payload").eq("kind", "panel_settings")
+                 .limit(1).execute().data)
+            if d:
+                p = d[0]["payload"]
+                if isinstance(p, str):
+                    import json
+                    p = json.loads(p)
+                return int(p.get("cash", default))
+        except Exception:
+            pass
+    return default
+
+
+def set_cash(v):
+    sb = _sb()
+    if not sb:
+        return
+    try:
+        exists = (sb.table("plans").select("kind").eq("kind", "panel_settings")
+                  .limit(1).execute().data)
+        if exists:
+            sb.table("plans").update({"payload": {"cash": int(v)}}).eq(
+                "kind", "panel_settings").execute()
+        else:
+            sb.table("plans").insert({"for_day": "1900-01-01", "kind": "panel_settings",
+                                      "payload": {"cash": int(v)}}).execute()
+    except Exception:
+        pass
+
+
 def backend_name():
     return "Supabase" if _sb() else "lokal CSV (gecici!)"
