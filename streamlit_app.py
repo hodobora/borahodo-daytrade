@@ -93,6 +93,28 @@ if oran > 85:
 elif oran > 60:
     st.warning("⚠️ Teminat/nakit %60 üstü — tampon inceliyor.")
 
+
+@st.cache_data(ttl=900, show_spinner=False)
+def spy_day():
+    try:
+        import yfinance as yf
+        px = yf.Ticker("SPY").history(period="5d")["Close"]
+        return float(px.iloc[-1] / px.iloc[-2] - 1) * 100
+    except Exception:
+        return None
+
+
+_spy = spy_day()
+if _spy is not None:
+    if _spy <= -1.0:
+        st.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin. "
+                 "(Kırmızı sabahta CALL satma — ani dönüş riski)")
+    elif _spy >= 1.0:
+        st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz; put satacaksan "
+                   "beğendiğin adayı yarın sabaha da bekleyebilirsin. (Hisse varken CALL günü)")
+    else:
+        st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr; aday kalitesi belirleyici.")
+
 # ---------- POZISYONLAR (ana ekran) ----------
 def current_mid(sym, expiry, strike, kind):
     """(mid, kaynak) dondurur: ('tv' canli | 'yf' ~15dk gecikmeli | None)."""
@@ -374,7 +396,12 @@ with tab_scan:
                 a, b = st.columns([3, 2])
                 emir = (f"🚫 SATILMAZ — bilanço {r.earnings} pozisyon penceresinde "
                         f"(bilanço sonrası tekrar bak)") if r.earn_flag else f"`{r.order}`"
-                a.markdown(f"**{renk} {r.sym}** ${r.spot} · {emir}{dup}")
+                dchg = getattr(r, "day_chg", None)
+                gun = ""
+                if dchg is not None:
+                    dot = "🔴" if dchg <= -1.5 else ("🟢" if dchg >= 1.5 else "⚪")
+                    gun = f" {dot}{dchg:+.1f}%"
+                a.markdown(f"**{renk} {r.sym}** ${r.spot}{gun} · {emir}{dup}")
                 if not r.earn_flag:
                     a.caption(f"✂️ satış dolunca hemen ekle → BUY 1 aynı kontrat "
                               f"@ limit {getattr(r, 'gtc_target', 0):.2f} · TIF: GTC (%75 kuralı)")

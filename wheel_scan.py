@@ -34,6 +34,7 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     if len(px) < 40:
         return f"{tk}: fiyat verisi yok"
     S = float(px.iloc[-1])
+    day_chg = float(px.iloc[-1] / px.iloc[-2] - 1) * 100 if len(px) >= 2 else 0.0
     lr = np.log(px / px.shift(1)).dropna()
     rv20 = float(lr.tail(20).std() * np.sqrt(252))
     try:
@@ -103,7 +104,7 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     K_all = p["strike"].astype(float)
     atm_iv = float(p["impliedVolatility"].iloc[(K_all - S).abs().argmin()]) if len(p) else None
     return dict(
-        sym=tk, spot=round(S, 2), expiry=str(exp)[:10], dte=int(dte),
+        sym=tk, spot=round(S, 2), day_chg=round(day_chg, 1), expiry=str(exp)[:10], dte=int(dte),
         strike=float(best["strike"]), bid=float(best["bid"]), ask=float(best["ask"]),
         mid=round(float(best["mid"]), 2), delta=round(float(best["delta"]), 2),
         yield_pct=round(float(best["yield_pct"]), 2),
