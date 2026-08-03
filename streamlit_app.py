@@ -394,8 +394,14 @@ with tab_scan:
             dup = " · 🔁 BU İSİMDE AÇIK POZİSYONUN VAR — üst üste bindirme" if r.sym in open_syms else ""
             with st.container(border=True):
                 a, b = st.columns([3, 2])
-                emir = (f"🚫 SATILMAZ — bilanço {r.earnings} pozisyon penceresinde "
-                        f"(bilanço sonrası tekrar bak)") if r.earn_flag else f"`{r.order}`"
+                if r.earn_flag and r.earnings == "?":
+                    emir = ("⚠️ bilanço tarihi DOĞRULANAMADI — satılabilir sayma, "
+                            "önce tarihi kontrol et")
+                elif r.earn_flag:
+                    emir = (f"🚫 SATILMAZ — bilanço {r.earnings} pozisyon penceresinde "
+                            f"(bilanço sonrası tekrar bak)")
+                else:
+                    emir = f"`{r.order}`"
                 dchg = getattr(r, "day_chg", None)
                 gun = ""
                 if dchg is not None:

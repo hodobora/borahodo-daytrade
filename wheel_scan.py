@@ -26,8 +26,28 @@ UNIVERSE = [
 ]
 
 
+def earnings_map(symbols):
+    """Bilanço tarihleri — BİRİNCİL kaynak TradingView (tek toplu istek, cloud'da sağlam)."""
+    from tradingview_screener import Query, col
+    from datetime import datetime, timezone
+    out = {}
+    try:
+        _, df = (Query().set_markets("america")
+                 .select("name", "earnings_release_next_date")
+                 .where(col("name").isin(list(symbols)))
+                 .limit(len(symbols) + 10)
+                 .get_scanner_data())
+        for r in df.itertuples():
+            v = r.earnings_release_next_date
+            if v == v and v:  # NaN kontrolu
+                out[r.name] = datetime.fromtimestamp(int(v), timezone.utc).date()
+    except Exception:
+        pass
+    return out
+
+
 def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
-             max_spread=10.0, min_oi=100):
+             max_spread=10.0, min_oi=100, edate=None):
     """Tek sembol icin en iyi CSP adayini dondurur (dict) veya str(elenme sebebi)."""
     t = yf.Ticker(tk)
     px = t.history(period="4mo")["Close"]
@@ -37,11 +57,13 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     day_chg = float(px.iloc[-1] / px.iloc[-2] - 1) * 100 if len(px) >= 2 else 0.0
     lr = np.log(px / px.shift(1)).dropna()
     rv20 = float(lr.tail(20).std() * np.sqrt(252))
-    try:
-        ed = t.calendar.get("Earnings Date")
-        edate = ed[0] if isinstance(ed, list) and ed else None
-    except Exception:
-        edate = None
+    if edate is None:  # TV'den gelmediyse yedek: yfinance
+        try:
+            ed = t.calendar.get("Earnings Date")
+            edate = ed[0] if isinstance(ed, list) and ed else None
+        except Exception:
+            edate = None
+    earn_unknown = edate is None
     today = date.today()
 
     # --- zincir: once TradingView canli, olmazsa yfinance ---
@@ -114,7 +136,8 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
         oi=int(best["openInterest"]) if not pd.isna(best["openInterest"]) else -1,
         collateral=int(best["strike"] * 100),
         earnings=str(edate) if edate else "?",
-        earn_flag="⚠️ bilanço pencerede" if earn_in_win else "",
+        earn_flag=("⚠️ bilanço pencerede" if earn_in_win
+                   else ("⚠️ bilanço tarihi doğrulanamadı" if earn_unknown else "")),
         crush_flag=("🎯 IV-crush penceresi" if (edate is not None
                     and (edate - today).days > 75 and ivrv > 1.1) else ""),
         breakeven=round(float(best["strike"]) - float(best["mid"]), 2),
@@ -128,9 +151,10 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
 def scan(universe, cash, **kw):
     """Evreni tarar; (DataFrame, notlar) dondurur. skor = VRP + getiri - spread cezasi."""
     rows, notes = [], []
+    emap = earnings_map(universe)
     for tk in universe:
         try:
-            r = scan_one(tk, cash, **kw)
+            r = scan_one(tk, cash, edate=emap.get(tk), **kw)
         except Exception as ex:
             r = f"{tk}: {ex}"
         if isinstance(r, dict):
