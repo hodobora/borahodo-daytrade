@@ -338,6 +338,8 @@ with tab_scan:
         min_oi = p4.number_input("Min açık pozisyon (OI)", 0, 5000, 100, 50)
         margin_mult = st.slider("Teminat çarpanı (1.0 = cash-secured · üstü = MARGIN/naked bölgesi)",
                                 1.0, 3.0, 1.0, 0.5)
+        min_vrp = st.slider("Min VRP (IV/RV) — edge eşiği; altı listeye giremez",
+                            1.0, 1.5, 1.10, 0.05)
         dyn = st.toggle("🌐 Dinamik evren — tüm ABD piyasası (TV screener: fiyat bandı + "
                         "hacim>2M + mktcap>2B, volatiliteye göre ilk N)", value=True)
         top_n = st.slider("Dinamik evren boyutu (derin taranacak isim)", 20, 100, 50, 5,
@@ -374,7 +376,7 @@ with tab_scan:
                 universe, free_cash,
                 delta_lo=-delta_band[1], delta_hi=-delta_band[0],
                 dte_lo=dte[0], dte_hi=dte[1],
-                max_spread=max_spread, min_oi=min_oi)
+                max_spread=max_spread, min_oi=min_oi, min_vrp=min_vrp)
         st.session_state["scan_df"] = df
         st.session_state["scan_notes"] = notes
         st.session_state["scan_ts"] = datetime.now(ET).strftime("%H:%M ET")

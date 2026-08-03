@@ -47,7 +47,7 @@ def earnings_map(symbols):
 
 
 def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
-             max_spread=10.0, min_oi=100, edate=None):
+             max_spread=10.0, min_oi=100, edate=None, min_vrp=1.10):
     """Tek sembol icin en iyi CSP adayini dondurur (dict) veya str(elenme sebebi)."""
     t = yf.Ticker(tk)
     px = t.history(period="4mo")["Close"]
@@ -123,6 +123,8 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     p["wk_yield"] = p["yield_pct"] / dte * 7
     best = p.nlargest(1, "wk_yield").iloc[0]
     ivrv = float(best["impliedVolatility"]) / rv20 if rv20 > 0 else np.nan
+    if ivrv == ivrv and ivrv < min_vrp:  # edge süzgeci (user kurali 2026-08-03)
+        return f"{tk}: VRP yok (x{ivrv:.2f} < {min_vrp:g})"
     K_all = p["strike"].astype(float)
     atm_iv = float(p["impliedVolatility"].iloc[(K_all - S).abs().argmin()]) if len(p) else None
     return dict(
