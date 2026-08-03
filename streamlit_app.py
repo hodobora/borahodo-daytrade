@@ -385,8 +385,15 @@ with tab_scan:
 
     df = st.session_state.get("scan_df")
     if df is not None and len(df):
-        st.caption(f"Son tarama: {st.session_state.get('scan_ts','?')} · fiyatlar ~15dk "
-                   "gecikmeli — emir girerken IBKR'deki canlı bid/ask esas")
+        srcs = set(df["src"]) if "src" in df.columns else set()
+        if srcs == {"tv"}:
+            veri_txt = "🟢 CANLI (TradingView streaming)"
+        elif srcs == {"yf"}:
+            veri_txt = "⚠️ ~15dk gecikmeli (TV oturumu düşmüş — yfinance yedek)"
+        else:
+            veri_txt = "karışık: TV canlı + bazı satırlar yfinance ~15dk"
+        st.caption(f"Son tarama: {st.session_state.get('scan_ts','?')} · fiyatlar {veri_txt} "
+                   "— emir girerken IBKR'deki canlı bid/ask esas")
         for r in df.itertuples():
             ivr = wheel_store.get_iv_rank(r.sym, r.atm_iv) if r.atm_iv else None
             ivr_txt = f" · IVR~{ivr}" if ivr is not None else ""
