@@ -210,26 +210,53 @@ def cc_suggest(sym):
 
 for r in open_pos.itertuples():
     if r.kind == "STOCK":
-        # --- 2. vites: elde hisse karti — CC adaylari otomatik ---
+        # --- 2. vites: elde hisse karti — CC adaylari + KURTARMA PROTOKOLU (onay 2026-08-05) ---
         spot = spot_price(r.sym)
         cost = float(r.fill or 0)
+        try:
+            age_d = (pd.Timestamp.now(tz="UTC") - pd.Timestamp(r.opened_at)).days
+        except Exception:
+            age_d = 0
+        age_w = age_d // 7 + 1
+        depth = (spot / cost - 1) * 100 if (spot and cost) else None
+        exit_mode = False
         with st.container(border=True):
             a, b = st.columns([2, 3])
-            a.markdown(f"**📦 {int(r.qty or 100)} {r.sym} hisse** · maliyet ${cost:.2f}")
+            a.markdown(f"**📦 {int(r.qty or 100)} {r.sym} hisse** · maliyet ${cost:.2f} · "
+                       f"{age_w}. hafta")
             if spot:
                 stk_pnl = (spot - cost) * int(r.qty or 100)
                 a.caption(f"spot \\${spot:.2f} · hisse P&L {stk_pnl:+.0f} USD · {r.note or ''}")
-            if spot is not None and spot < cost:
-                a.warning(f"🟠 spot maliyetin altında — CC yazarken strike ≥ ${cost:.2f} olsun "
-                          "(altına yazarsan çağrılınca zarar kilitlenir)")
+            if depth is None:
+                a.caption("spot alınamadı — kurtarma protokolü hesaplanamıyor")
+            elif depth <= -15:
+                a.error(f"🔴 KURTARMA — DERİNLİK RAYI: maliyetten {depth:.1f}% (ray -%15). "
+                        "Sisteme göre bu hafta HİSSEYİ SAT — panik değil, takvim.")
+            elif age_d > 84 and depth < 0:
+                a.error("🔴 KURTARMA — ZAMAN STOPU: 12 hafta doldu, hâlâ maliyet altı. "
+                        "Sisteme göre HİSSEYİ SAT.")
+            elif age_d > 35 and depth < 0:
+                exit_mode = True
+                a.warning(f"🟠 ÇIKIŞ MODU ({age_w}. hafta · maliyetten {depth:.1f}%): "
+                          "CC'yi spota YAKIN yaz — maliyet-altı strike bu fazda SERBEST, "
+                          "hedef çağrılmak. Zaman stopu: 12. hafta.")
+            elif depth < 0:
+                a.info(f"🟡 Kurtarma takvimi: {age_w}. hafta (normal faz — strike ≥ maliyet) · "
+                       f"derinlik {depth:.1f}% (ray -%15) · çıkış modu 6. haftada başlar. "
+                       "TA kırılımı görürsen erkene çekebilirsin — ertelemek yasak.")
             else:
-                a.success("🟢 CC satmaya uygun — yeşil günde sat")
+                a.success(f"🟢 maliyet üstü ({depth:+.1f}%) — protokol uykuda. "
+                          "CC satmaya uygun (yeşil günde sat)")
             b.markdown("**📞 Güncel CC adayları** (0.15-0.35Δ, canlı):")
             sugg = cc_suggest(r.sym)
             if not sugg:
                 b.caption("şu an bantta aday yok / zincir alınamadı")
             for sg in sugg:
-                flag = " 🚨 maliyet altı!" if sg["strike"] < cost else ""
+                if exit_mode:
+                    flag = (" 🎯 çıkış-modu adayı"
+                            if (spot and abs(sg["strike"] - spot) / spot < 0.06) else "")
+                else:
+                    flag = " 🚨 maliyet altı!" if sg["strike"] < cost else ""
                 b.markdown(f"`SELL 1 {r.sym} {sg['expiry']} {sg['strike']:g}C @ limit "
                            f"{sg['mid']:.2f}` · Δ{sg['delta']:.2f}{flag}")
             with st.popover("İşlem (hisse satıldı/çağrıldı)"):
