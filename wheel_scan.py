@@ -125,6 +125,19 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     ivrv = float(best["impliedVolatility"]) / rv20 if rv20 > 0 else np.nan
     if ivrv == ivrv and ivrv < min_vrp:  # edge süzgeci (user kurali 2026-08-03)
         return f"{tk}: VRP yok (x{ivrv:.2f} < {min_vrp:g})"
+    # bilanço çapraz doğrulaması (user onayı 2026-08-06): TV küçük hisselerde bayat
+    # kalabiliyor (USAR vakası) — aday listeye girmeden yf ile karşılaştır, ERKEN tarih esas
+    if not earn_in_win:
+        try:
+            ed2 = t.calendar.get("Earnings Date")
+            y2 = ed2[0] if isinstance(ed2, list) and ed2 else None
+        except Exception:
+            y2 = None
+        if y2 is not None and (edate is None or y2 < edate):
+            edate = y2
+            if today <= edate <= pd.Timestamp(exp).date():
+                earn_in_win = True
+            earn_unknown = False
     K_all = p["strike"].astype(float)
     atm_iv = float(p["impliedVolatility"].iloc[(K_all - S).abs().argmin()]) if len(p) else None
     return dict(
