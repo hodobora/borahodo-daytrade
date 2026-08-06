@@ -103,18 +103,6 @@ def spy_day():
     except Exception:
         return None
 
-
-_spy = spy_day()
-if _spy is not None:
-    if _spy <= -1.0:
-        st.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin. "
-                 "(Kırmızı sabahta CALL satma — ani dönüş riski)")
-    elif _spy >= 1.0:
-        st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz; put satacaksan "
-                   "beğendiğin adayı yarın sabaha da bekleyebilirsin. (Hisse varken CALL günü)")
-    else:
-        st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr; aday kalitesi belirleyici.")
-
 # ---------- POZISYONLAR (ana ekran) ----------
 def current_mid(sym, expiry, strike, kind):
     """(mid, kaynak) dondurur: ('tv' canli | 'yf' ~15dk gecikmeli | None)."""
@@ -381,6 +369,16 @@ with tab_scan:
     st.info("Kural hatırlatma: bilanço pencerede olan vade atlanır · sadece taşımaya razı "
             "olduğun hissede sat · limit emir, asla market · kırmızı gün = put satış günü.")
 
+    _spy = spy_day()
+    if _spy is not None:
+        if _spy <= -1.0:
+            st.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin. "
+                     "(Kırmızı sabahta CALL satma)")
+        elif _spy >= 1.0:
+            st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz; acele etme. "
+                       "(Hisse varken CALL günü)")
+        else:
+            st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr; aday kalitesi belirleyici.")
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
     st.caption(f"Serbest nakit (tarama filtresi): ${max(cash - used_collateral, 0):,.0f} "
                f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'}")
