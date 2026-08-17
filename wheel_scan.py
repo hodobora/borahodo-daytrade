@@ -198,7 +198,10 @@ def dynamic_universe(free_cash, min_avg_vol=2e6, min_mcap=2e9, top_n=50):
                 col("average_volume_10d_calc") > min_avg_vol,
                 col("market_cap_basic") > min_mcap,
                 col("type") == "stock",
-                col("is_primary") == True)
+                col("is_primary") == True,
+                # biyotek/ilac harici (user onayi 2026-08-18, SLS vakasi):
+                # klinik/FDA binary riski bilanco takviminde gorunmez
+                col("sector") != "Health Technology")
          .order_by("Volatility.M", ascending=False)
          .limit(top_n))
     _, df = q.get_scanner_data()
