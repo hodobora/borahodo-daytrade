@@ -343,6 +343,12 @@ tab_scan, tab_journal = st.tabs(["🔍 Tarama", "📒 Journal"])
 
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _leg_betas(syms):
+    """Açık bacakların betası — düşük-beta bilgi notu için (saatte 1 tazelenir)."""
+    return wheel_scan.beta_of(list(syms))
+
+
 # ---------- TARAMA ----------
 with tab_scan:
     with st.expander("Parametreler", expanded=False):
@@ -445,12 +451,26 @@ with tab_scan:
                 if not r.earn_flag:
                     a.caption(f"✂️ satış dolunca hemen ekle → BUY 1 aynı kontrat "
                               f"@ limit {getattr(r, 'gtc_target', 0):.2f} · TIF: GTC (%75 kuralı)")
+                _b = getattr(r, "beta", None)
+                _btxt = (f" · β{_b:.2f}" + (" 🐢" if _b < 0.8 else "")) if _b is not None and _b == _b else ""
                 a.caption(f"getiri %{r.yield_pct} / {r.dte}g (haftalık %{r.wk_yield}) · "
-                          f"Δ{r.delta} · IV {r.iv:.0%} / RV {r.rv20:.0%} (×{r.iv_rv}){ivr_txt}")
+                          f"Δ{r.delta} · IV {r.iv:.0%} / RV {r.rv20:.0%} (×{r.iv_rv}){ivr_txt}{_btxt}")
                 crush = getattr(r, "crush_flag", "")
                 b.caption(f"teminat ${r.collateral:,} · başabaş ${r.breakeven} · "
                           f"spread %{r.spread_pct} · OI {r.oi} · bilanço {r.earnings} "
                           f"{r.earn_flag} {crush}")
+        # Düşük-beta bilgi notu (user onayı 2026-08-24): SADECE NOT — filtre/sıralama
+        # değişmez. Koşul: açık bacak >= 2 (sıradaki 3.+) VE hepsi yüksek-beta.
+        # Dayanak: backtest "3+ bacakta >=1 düşük-beta" MaxDD -17.9 -> -14.4.
+        if len(open_syms) >= 2:
+            _lb = _leg_betas(tuple(sorted(open_syms)))
+            if not any(b is not None and b < 0.8 for b in _lb.values()):
+                _lbtxt = ", ".join(f"{s} β{b:.2f}" if b is not None else f"{s} β?"
+                                   for s, b in _lb.items())
+                st.warning(f"⚠️ Sıradaki bacak 3.+ ve açık pozisyonların hepsi yüksek-beta "
+                           f"({_lbtxt}). Düşük-betalı (β<0.8 🐢) adaya öncelik düşün — "
+                           "kural defteri: '3+ bacakta ≥1 düşük-beta' "
+                           "(backtest: MaxDD -17.9% → -14.4%). Karar senin.")
         with st.expander("Elenenler"):
             for n in st.session_state.get("scan_notes", []):
                 st.text(n)

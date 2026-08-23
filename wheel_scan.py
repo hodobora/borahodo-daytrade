@@ -47,7 +47,7 @@ def earnings_map(symbols):
 
 
 def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
-             max_spread=10.0, min_oi=100, edate=None, min_vrp=1.10):
+             max_spread=10.0, min_oi=100, edate=None, min_vrp=1.10, spy_lr=None):
     """Tek sembol icin en iyi CSP adayini dondurur (dict) veya str(elenme sebebi)."""
     t = yf.Ticker(tk)
     px = t.history(period="4mo")["Close"]
@@ -57,6 +57,16 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     day_chg = float(px.iloc[-1] / px.iloc[-2] - 1) * 100 if len(px) >= 2 else 0.0
     lr = np.log(px / px.shift(1)).dropna()
     rv20 = float(lr.tail(20).std() * np.sqrt(252))
+    # beta (SPY'a karsi, ~son 4 ay) — SALT BILGI NOTU, hicbir filtreye girmez
+    # (2026-08-24 user onayi: dusuk-beta bacak hatirlatmasi icin)
+    beta = None
+    if spy_lr is not None:
+        j = pd.concat([lr, spy_lr], axis=1, join="inner").dropna()
+        if len(j) >= 40:
+            v = float(j.iloc[:, 1].var())
+            if v > 0:
+                b = float(j.iloc[:, 0].cov(j.iloc[:, 1])) / v
+                beta = round(b, 2) if b == b else None
     if edate is None:  # TV'den gelmediyse yedek: yfinance
         try:
             ed = t.calendar.get("Earnings Date")
@@ -147,7 +157,7 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
         yield_pct=round(float(best["yield_pct"]), 2),
         wk_yield=round(float(best["wk_yield"]), 2),
         iv=round(float(best["impliedVolatility"]), 2), rv20=round(rv20, 2),
-        iv_rv=round(ivrv, 2), spread_pct=round(float(best["spread_pct"]), 1),
+        iv_rv=round(ivrv, 2), beta=beta, spread_pct=round(float(best["spread_pct"]), 1),
         oi=int(best["openInterest"]) if not pd.isna(best["openInterest"]) else -1,
         collateral=int(best["strike"] * 100),
         earnings=str(edate) if edate else "?",
@@ -163,13 +173,35 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     )
 
 
+def beta_of(symbols):
+    """Acik bacaklarin SPY betasi (~6 ay) — panel bilgi notu icin. {sym: beta|None}."""
+    symbols = list(symbols)
+    try:
+        data = yf.download(symbols + ["SPY"], period="6mo",
+                           auto_adjust=True, progress=False)["Close"]
+        lr = np.log(data / data.shift(1))
+        v = float(lr["SPY"].var())
+        out = {}
+        for s in symbols:
+            b = float(lr[s].cov(lr["SPY"])) / v if s in lr and v > 0 else float("nan")
+            out[s] = round(b, 2) if b == b else None
+        return out
+    except Exception:
+        return {s: None for s in symbols}
+
+
 def scan(universe, cash, **kw):
     """Evreni tarar; (DataFrame, notlar) dondurur. skor = VRP + getiri - spread cezasi."""
     rows, notes = [], []
     emap = earnings_map(universe)
+    try:  # beta bilgi notu icin SPY getirileri (tek istek; hata olursa beta=None kalir)
+        spy_px = yf.Ticker("SPY").history(period="4mo")["Close"]
+        spy_lr = np.log(spy_px / spy_px.shift(1)).dropna()
+    except Exception:
+        spy_lr = None
     for tk in universe:
         try:
-            r = scan_one(tk, cash, edate=emap.get(tk), **kw)
+            r = scan_one(tk, cash, edate=emap.get(tk), spy_lr=spy_lr, **kw)
         except Exception as ex:
             r = f"{tk}: {ex}"
         if isinstance(r, dict):
