@@ -1,0 +1,9 @@
+streamlit>=1.37
+pandas
+numpy
+scipy
+yfinance
+tradingview-screener
+supabase
+pyarrow
+streamlit-autorefresh
