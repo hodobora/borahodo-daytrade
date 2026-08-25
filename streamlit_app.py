@@ -363,6 +363,9 @@ with tab_scan:
                             1.0, 1.5, 1.10, 0.05)
         dyn = st.toggle("🌐 Dinamik evren — tüm ABD piyasası (TV screener: fiyat bandı + "
                         "hacim>2M + mktcap>2B, volatiliteye göre ilk N)", value=True)
+        deep = st.toggle("🔬 DERİN MOD — tüm uygun evren (~490 isim, 2-4 dk, TV oturumu "
+                         "şart; NKE'yi bulan tarama). Filtreler birebir aynı, sadece "
+                         "evren tavansız.", value=False, disabled=not dyn)
         top_n = st.slider("Dinamik evren boyutu (derin taranacak isim)", 20, 100, 50, 5,
                           disabled=not dyn)
         uni_text = st.text_area("Sabit evren (virgülle)", ", ".join(wheel_scan.UNIVERSE),
@@ -397,17 +400,28 @@ with tab_scan:
         if universe is None:
             with st.spinner("Aşama 1: TV screener ile tüm ABD piyasası eleniyor..."):
                 try:
-                    universe = wheel_scan.dynamic_universe(free_cash, top_n=top_n)
+                    universe = wheel_scan.dynamic_universe(free_cash,
+                                                           top_n=500 if deep else top_n)
                     st.caption(f"Dinamik evren ({len(universe)}): {', '.join(universe)}")
                 except Exception as ex:
                     st.error(f"TV screener hatası: {ex} — sabit evrene dönüldü")
                     universe = wheel_scan.UNIVERSE
-        with st.spinner(f"Aşama 2: {len(universe)} sembolün opsiyon zinciri taranıyor (~1-3 dk)..."):
-            df, notes = wheel_scan.scan(
+        if deep:
+            prog = st.progress(0, text=f"🔬 Derin tarama: 0/{len(universe)}")
+            df, notes = wheel_scan.scan_deep(
                 universe, free_cash,
                 delta_lo=-delta_band[1], delta_hi=-delta_band[0],
                 dte_lo=dte[0], dte_hi=dte[1],
-                max_spread=max_spread, min_oi=min_oi, min_vrp=min_vrp)
+                max_spread=max_spread, min_vrp=min_vrp,
+                progress=lambda d, t: prog.progress(d / t, text=f"🔬 Derin tarama: {d}/{t}"))
+            prog.empty()
+        else:
+            with st.spinner(f"Aşama 2: {len(universe)} sembolün opsiyon zinciri taranıyor (~1-3 dk)..."):
+                df, notes = wheel_scan.scan(
+                    universe, free_cash,
+                    delta_lo=-delta_band[1], delta_hi=-delta_band[0],
+                    dte_lo=dte[0], dte_hi=dte[1],
+                    max_spread=max_spread, min_oi=min_oi, min_vrp=min_vrp)
         st.session_state["scan_df"] = df
         st.session_state["scan_notes"] = notes
         st.session_state["scan_ts"] = datetime.now(ET).strftime("%H:%M ET")
