@@ -136,18 +136,21 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     if ivrv == ivrv and ivrv < min_vrp:  # edge süzgeci (user kurali 2026-08-03)
         return f"{tk}: VRP yok (x{ivrv:.2f} < {min_vrp:g})"
     # bilanço çapraz doğrulaması (user onayı 2026-08-06): TV küçük hisselerde bayat
-    # kalabiliyor (USAR vakası) — aday listeye girmeden yf ile karşılaştır, ERKEN tarih esas
+    # kalabiliyor (USAR vakası) — aday listeye girmeden yf ile karşılaştır, ERKEN tarih esas.
+    # 2026-08-25 düzeltme (BMNR vakası): geçmiş tarih = bayat veri, geleceği EZEMEZ
     if not earn_in_win:
         try:
             ed2 = t.calendar.get("Earnings Date")
             y2 = ed2[0] if isinstance(ed2, list) and ed2 else None
         except Exception:
             y2 = None
-        if y2 is not None and (edate is None or y2 < edate):
+        if y2 is not None and y2 >= today and (edate is None or edate < today or y2 < edate):
             edate = y2
             if today <= edate <= pd.Timestamp(exp).date():
                 earn_in_win = True
             earn_unknown = False
+    if edate is not None and edate < today:  # iki kaynak da bayat: bilinmiyor say
+        earn_unknown = True
     K_all = p["strike"].astype(float)
     atm_iv = float(p["impliedVolatility"].iloc[(K_all - S).abs().argmin()]) if len(p) else None
     return dict(
@@ -289,17 +292,20 @@ def scan_deep(universe, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=2
             if ivrv == ivrv and ivrv < min_vrp:
                 notes.append(f"{tk}: VRP yok (x{ivrv:.2f} < {min_vrp:g})"); continue
             # bilanço çapraz doğrulama — sadece geçen adaylar için (yf tekil istek)
+            # 2026-08-25 düzeltme (BMNR): geçmiş tarih = bayat, geleceği ezemez
             if not earn_in_win:
                 try:
                     ed2 = yf.Ticker(tk).calendar.get("Earnings Date")
                     y2 = ed2[0] if isinstance(ed2, list) and ed2 else None
                 except Exception:
                     y2 = None
-                if y2 is not None and (edate is None or y2 < edate):
+                if y2 is not None and y2 >= today and (edate is None or edate < today or y2 < edate):
                     edate = y2
                     if today <= edate <= expd:
                         earn_in_win = True
                     earn_unknown = False
+            if edate is not None and edate < today:  # iki kaynak da bayat: bilinmiyor say
+                earn_unknown = True
             exp = str(expd)
             K_all = p["strike"].astype(float)
             atm_iv = float(p["impliedVolatility"].iloc[(K_all - S).abs().argmin()]) if len(p) else None
