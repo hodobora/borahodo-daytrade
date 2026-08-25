@@ -363,9 +363,6 @@ with tab_scan:
                             1.0, 1.5, 1.10, 0.05)
         dyn = st.toggle("🌐 Dinamik evren — tüm ABD piyasası (TV screener: fiyat bandı + "
                         "hacim>2M + mktcap>2B, volatiliteye göre ilk N)", value=True)
-        deep = st.toggle("🔬 DERİN MOD — tüm uygun evren (~490 isim, 2-4 dk, TV oturumu "
-                         "şart; NKE'yi bulan tarama). Filtreler birebir aynı, sadece "
-                         "evren tavansız.", value=False, disabled=not dyn)
         top_n = st.slider("Dinamik evren boyutu (derin taranacak isim)", 20, 100, 50, 5,
                           disabled=not dyn)
         uni_text = st.text_area("Sabit evren (virgülle)", ", ".join(wheel_scan.UNIVERSE),
@@ -391,7 +388,16 @@ with tab_scan:
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
     st.caption(f"Serbest nakit (tarama filtresi): ${max(cash - used_collateral, 0):,.0f} "
                f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'}")
-    if st.button("🔍 TARA", type="primary", use_container_width=True):
+    run_normal = st.button("🔍 TARA", type="primary", use_container_width=True)
+    st.markdown("""<style>
+    .st-key-deep_btn button{background-color:#1c83e1;border-color:#1c83e1;color:white;}
+    .st-key-deep_btn button:hover{background-color:#1668b0;border-color:#1668b0;color:white;}
+    .st-key-deep_btn button:active,.st-key-deep_btn button:focus{background-color:#1668b0;border-color:#1668b0;color:white;}
+    </style>""", unsafe_allow_html=True)
+    run_deep = st.button("🔬 DERİN TARA — tüm uygun evren (~490 isim, 2-4 dk)",
+                         key="deep_btn", use_container_width=True)
+    if run_normal or run_deep:
+        deep = run_deep
         free_cash = max(cash - used_collateral, 0) * margin_mult
         if margin_mult > 1.0:
             st.error(f"🟥 MARGIN MODU ×{margin_mult:g} — bu taramadaki büyük kontratlar naked put "
