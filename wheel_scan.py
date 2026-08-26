@@ -131,7 +131,10 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     p["yield_pct"] = p["mid"] / p["strike"] * 100
     dte = max(T * 365, 1)
     p["wk_yield"] = p["yield_pct"] / dte * 7
-    best = p.nlargest(1, "wk_yield").iloc[0]
+    # secim kurali (user onayi 2026-08-26): max getiri DEGIL, Δ0.24'e en yakin kontrat.
+    # Dayanak: delta sweep 0.22-0.26 vadisi (MaxDD -17.9→-11, CAGR ~ayni, Sharpe 2.45);
+    # A/B testi 26 Agu: aday SAYISI degismiyor, sadece kontrat secimi kayiyor.
+    best = p.iloc[(p["delta"] + 0.24).abs().argmin()]
     ivrv = float(best["impliedVolatility"]) / rv20 if rv20 > 0 else np.nan
     if ivrv == ivrv and ivrv < min_vrp:  # edge süzgeci (user kurali 2026-08-03)
         return f"{tk}: VRP yok (x{ivrv:.2f} < {min_vrp:g})"
@@ -287,7 +290,8 @@ def scan_deep(universe, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=2
             dte = max(T * 365, 1)
             p["yield_pct"] = p["mid"] / p["strike"] * 100
             p["wk_yield"] = p["yield_pct"] / dte * 7
-            best = p.nlargest(1, "wk_yield").iloc[0]
+            # secim kurali (user onayi 2026-08-26): Δ0.24'e en yakin kontrat
+            best = p.iloc[(p["delta"] + 0.24).abs().argmin()]
             ivrv = float(best["impliedVolatility"]) / rv20
             if ivrv == ivrv and ivrv < min_vrp:
                 notes.append(f"{tk}: VRP yok (x{ivrv:.2f} < {min_vrp:g})"); continue
