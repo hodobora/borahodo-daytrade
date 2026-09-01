@@ -268,10 +268,11 @@ for r in open_pos.itertuples():
                   f"başabaş ${float(r.strike) - fill:.2f} · vade {dte_left}g · {r.note or ''}")
         level, msg = verdict(r.kind, spot, float(r.strike), prog)
         getattr(a, level if level != "caption" else "caption")(msg)
-        # ROLL onerisi: ITM + vadeye <=3 gun
+        # ROLL onerisi: ITM + vadeye <=1 gun (user onayi 2026-09-01: karar gunu
+        # persembe/cuma — erken gosterim erken islem davet ediyordu, <=3'ten daraltildi)
         itm = spot is not None and ((r.kind == "CSP" and spot < float(r.strike))
                                     or (r.kind == "CC" and spot > float(r.strike)))
-        if itm and isinstance(dte_left, int) and dte_left <= 3:
+        if itm and isinstance(dte_left, int) and dte_left <= 1:
             rq = roll_quote(r.sym, r.strike, r.expiry, r.kind)
             if rq and mid is not None:
                 ne, nmid = rq
