@@ -387,8 +387,14 @@ with tab_scan:
         else:
             st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr; aday kalitesi belirleyici.")
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
+    # İsim sayacı (user onayı 2026-09-02): max 4 farklı isim kuralı — SALT BİLGİ, filtre yok
+    MAX_NAMES = 4
     st.caption(f"Serbest nakit (tarama filtresi): ${max(cash - used_collateral, 0):,.0f} "
-               f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'}")
+               f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'} "
+               f"· **{len(open_syms)}/{MAX_NAMES} isim**")
+    if len(open_syms) >= MAX_NAMES:
+        st.warning(f"⚠️ İsim tavanı dolu ({len(open_syms)}/{MAX_NAMES}) — kural: yeni isim açma, "
+                   "mevcutların kapanmasını bekle. (Aynı isme ek kontrat bütçeye göre serbest.)")
     run_normal = st.button("🔍 TARA", type="primary", use_container_width=True)
     st.markdown("""<style>
     .st-key-deep_btn button{background-color:#1c83e1;border-color:#1c83e1;color:white;}
