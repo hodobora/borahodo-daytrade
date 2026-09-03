@@ -138,28 +138,6 @@ def spot_price(sym):
         return None
 
 
-def roll_quote(sym, strike, cur_expiry, kind):
-    """ITM + vadesi yakin pozisyon icin bir sonraki vadede ayni strike'in primi."""
-    try:
-        import yfinance as yf
-        t = yf.Ticker(sym)
-        cur = pd.Timestamp(cur_expiry).date()
-        exps = [e for e in t.options
-                if 4 <= (pd.Timestamp(e).date() - cur).days <= 11]
-        if not exps:
-            return None
-        ne = exps[0]
-        ch = t.option_chain(ne)
-        leg = ch.puts if kind == "CSP" else ch.calls
-        row = leg[leg["strike"] == float(strike)]
-        if not len(row):
-            return None
-        mid = (float(row["bid"].iloc[0]) + float(row["ask"].iloc[0])) / 2
-        return ne, round(mid, 2)
-    except Exception:
-        return None
-
-
 def verdict(kind, spot, strike, prog):
     """Karar etiketi: KAPAT / TUT / SINIRDA / ITM. Stop yok — ITM'de bile kural TUT."""
     if prog is not None and prog >= 0.75:
@@ -268,17 +246,19 @@ for r in open_pos.itertuples():
                   f"başabaş ${float(r.strike) - fill:.2f} · vade {dte_left}g · {r.note or ''}")
         level, msg = verdict(r.kind, spot, float(r.strike), prog)
         getattr(a, level if level != "caption" else "caption")(msg)
-        # ROLL onerisi: ITM + vadeye <=1 gun (user onayi 2026-09-01: karar gunu
-        # persembe/cuma — erken gosterim erken islem davet ediyordu, <=3'ten daraltildi)
+        # KARAR GUNU notu: ITM + vadeye <=1 gun. ROLL SECENEGI KALDIRILDI
+        # (user onayi 2026-09-03; backtest: sistematik roll hesabi sifirladi —
+        #  CAGR cokusu, MaxDD -106%, kazanma orani %91 -> %55. Roll = zarari
+        #  kapatmak yerine buyuterek ertelemek.)
         itm = spot is not None and ((r.kind == "CSP" and spot < float(r.strike))
                                     or (r.kind == "CC" and spot > float(r.strike)))
         if itm and isinstance(dte_left, int) and dte_left <= 1:
-            rq = roll_quote(r.sym, r.strike, r.expiry, r.kind)
-            if rq and mid is not None:
-                ne, nmid = rq
-                a.info(f"🔁 ROLL seçeneği: bu kontratı ~${mid:.2f}'e kapat, {ne} "
-                       f"${float(r.strike):g} aynı strike ~${nmid:.2f}'den sat → "
-                       f"net ~${nmid - mid:+.2f} kredi. Alternatif: assign kabul → CC. Karar: Bora")
+            a.info(f"⚖️ KARAR GÜNÜ (ITM, vade {dte_left}g): iki seçenek — "
+                   f"**(a) assign kabul** → hisse gelir, STOCK kartı + CC fazı başlar · "
+                   f"**(b) kapat** → ~${mid:.2f}'e geri al, prim farkıyla çık. "
+                   "ROLL YOK (backtest: sistematik roll hesabı sıfırlıyor). Karar: Bora"
+                   if mid is not None else
+                   "⚖️ KARAR GÜNÜ (ITM): assign kabul → CC fazı, ya da kapat. ROLL YOK. Karar: Bora")
         # Erken kapama/roll ipucu: %60-75 arasi kar + vakit varsa
         if prog is not None and 0.60 <= prog < 0.75 and isinstance(dte_left, int) and dte_left >= 4:
             a.caption(f"💡 Erken kapama düşünülebilir: kârın %{prog*100:.0f}'i cepte, kalan "
