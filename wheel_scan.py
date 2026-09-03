@@ -125,6 +125,13 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
         return f"{tk}: filtre sonrasi aday yok (nakit/delta)"
     oi = p["openInterest"]
     p = p[oi.isna() | (oi.fillna(0) >= min_oi)]
+    # KOTASYON SAGLIK KONTROLU (user onayi 2026-09-03; SLS/CLF/NN vakalari):
+    # bid=ask (spread ~%0) veya bid=0 => bayat/carpik kare, mid GUVENILMEZ.
+    # Bu satirlar aday olarak GOSTERILMEZ — yanlis limit fiyati onune cikmasin.
+    _bad = (p["spread_pct"] < 1.0) | (p["bid"] <= 0) | (p["ask"] <= 0)
+    if _bad.all() and len(p):
+        return f"{tk}: kotasyon supheli (spread ~%0 / bid yok) — atlandi"
+    p = p[~_bad]
     p = p[p["spread_pct"] <= max_spread]
     if p.empty:
         return f"{tk}: spread genis"
@@ -283,6 +290,10 @@ def scan_deep(universe, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=2
             p = p[p["strike"] * 100 <= cash]
             if p.empty:
                 notes.append(f"{tk}: filtre sonrasi aday yok (nakit/delta)"); continue
+            _bad = (p["spread_pct"] < 1.0) | (p["bid"] <= 0) | (p["ask"] <= 0)
+            if _bad.all() and len(p):
+                notes.append(f"{tk}: kotasyon supheli (spread ~%0 / bid yok) — atlandi"); continue
+            p = p[~_bad]
             p = p[p["spread_pct"] <= max_spread]
             if p.empty:
                 notes.append(f"{tk}: spread genis"); continue
