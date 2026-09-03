@@ -253,12 +253,15 @@ for r in open_pos.itertuples():
         itm = spot is not None and ((r.kind == "CSP" and spot < float(r.strike))
                                     or (r.kind == "CC" and spot > float(r.strike)))
         if itm and isinstance(dte_left, int) and dte_left <= 1:
-            a.info(f"⚖️ KARAR GÜNÜ (ITM, vade {dte_left}g): iki seçenek — "
-                   f"**(a) assign kabul** → hisse gelir, STOCK kartı + CC fazı başlar · "
-                   f"**(b) kapat** → ~${mid:.2f}'e geri al, prim farkıyla çık. "
-                   "ROLL YOK (backtest: sistematik roll hesabı sıfırlıyor). Karar: Bora"
-                   if mid is not None else
-                   "⚖️ KARAR GÜNÜ (ITM): assign kabul → CC fazı, ya da kapat. ROLL YOK. Karar: Bora")
+            a.warning(f"⚖️ VADE GÜNÜ (ITM, {dte_left}g) — **ÖNERİ: KAPAT** "
+                      f"(~${mid:.2f}'e geri al, prim farkıyla çık). "
+                      "10 yıllık backtest: vade günü kapatmak, assign almaya göre "
+                      "Sharpe 1.72→2.28 · çukur -13%→-11% · kilitli hafta 201→0. "
+                      "Alternatif: assign kabul → hisse + CC fazı (hisseyi gerçekten "
+                      "istiyorsan meşru). ROLL YOK. Karar: Bora"
+                      if mid is not None else
+                      "⚖️ VADE GÜNÜ (ITM) — ÖNERİ: KAPAT (10 yıllık backtest assign'a "
+                      "karşı). Alternatif: assign kabul → CC fazı. ROLL YOK. Karar: Bora")
         # Erken kapama/roll ipucu: %60-75 arasi kar + vakit varsa
         if prog is not None and 0.60 <= prog < 0.75 and isinstance(dte_left, int) and dte_left >= 4:
             a.caption(f"💡 Erken kapama düşünülebilir: kârın %{prog*100:.0f}'i cepte, kalan "
