@@ -146,8 +146,8 @@ def verdict(kind, spot, strike, prog):
         return "caption", "spot alınamadı"
     if kind == "CSP":
         if spot < strike:
-            return "error", (f"🔴 ITM (spot ${spot:.2f} < strike) — assign muhtemel. "
-                             "Kural: panik satışı YOK, vadeye kadar TUT; assign olursa pazartesi CC")
+            return "error", (f"🔴 ITM (spot ${spot:.2f} < strike) — panik satışı YOK, "
+                             "vade gününe kadar TUT ve izle; karar vade günü (öneri: kapat)")
         if spot < strike * 1.03:
             return "warning", f"🟠 SINIRDA — spot ${spot:.2f}, strike'a <%3. TUT ve izle"
         return "success", f"🟢 TUT — spot ${spot:.2f}, plan çalışıyor"
@@ -245,16 +245,23 @@ for r in open_pos.itertuples():
         a.caption(f"fill ${fill:.2f} · prim ${float(r.premium or 0):.0f} · "
                   f"başabaş ${float(r.strike) - fill:.2f} · vade {dte_left}g · {r.note or ''}")
         level, msg = verdict(r.kind, spot, float(r.strike), prog)
-        getattr(a, level if level != "caption" else "caption")(msg)
-        # KARAR GUNU notu: ITM + vadeye <=1 gun. ROLL SECENEGI KALDIRILDI
-        # (user onayi 2026-09-03; backtest: sistematik roll hesabi sifirladi —
-        #  CAGR cokusu, MaxDD -106%, kazanma orani %91 -> %55. Roll = zarari
-        #  kapatmak yerine buyuterek ertelemek.)
         itm = spot is not None and ((r.kind == "CSP" and spot < float(r.strike))
                                     or (r.kind == "CC" and spot > float(r.strike)))
-        if itm and isinstance(dte_left, int) and dte_left <= 1:
-            a.warning(f"⚖️ VADE GÜNÜ (ITM, {dte_left}g) — **ÖNERİ: KAPAT** · "
-                      "alternatif: assign kabul · Karar: Bora")
+        vade_gunu = isinstance(dte_left, int) and dte_left <= 1
+        # VADE GUNU (user onayi 2026-09-04): kirmizi ITM kutusu vade gununde GOSTERILMEZ,
+        # yerine tek karar notu. ROLL yok (backtest: sistematik roll hesabi sifirladi).
+        if vade_gunu and itm:
+            a.warning(f"⚖️ VADE GÜNÜ (ITM, {dte_left}g) — **ÖNERİ: KAPAT** (GTC dolmaz, "
+                      "buy-to-close gir) · alternatif: assign kabul · Karar: Bora")
+        elif vade_gunu and not (prog is not None and prog >= 0.75):
+            # OTM + vade gunu: degersiz sonlanir, islem gerekmez
+            getattr(a, level if level != "caption" else "caption")(msg)
+            a.info(f"⏳ VADE GÜNÜ (OTM, {dte_left}g) — kapanışta değersiz sonlanır, primin "
+                   "tamamı kalır. İşlem gerekmez; GTC varsa kendiliğinden dolabilir.")
+        else:
+            getattr(a, level if level != "caption" else "caption")(msg)
+            if vade_gunu and prog is not None and prog >= 0.75:
+                a.caption("⏳ vade günü — GTC dolmadıysa kapanışta değersiz sonlanır, fark yok")
         # Erken kapama/roll ipucu: %60-75 arasi kar + vakit varsa
         if prog is not None and 0.60 <= prog < 0.75 and isinstance(dte_left, int) and dte_left >= 4:
             a.caption(f"💡 Erken kapama düşünülebilir: kârın %{prog*100:.0f}'i cepte, kalan "
