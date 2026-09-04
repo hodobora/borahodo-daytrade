@@ -84,7 +84,9 @@ cash = c1.number_input("Hesap nakiti ($)", min_value=0,
 st.session_state["cash"] = cash
 if cash != stored_cash:
     wheel_store.set_cash(cash)  # kalici — her cihazda ayni deger acilir
-c2.metric("Kullanılan teminat", f"${used_collateral:,.0f}")
+# user onayi 2026-09-04: buyuk rakam SERBEST teminat, kullanilan kucuk alt satir
+c2.metric("Serbest teminat", f"${max(cash - used_collateral, 0):,.0f}",
+          delta=f"kullanılan ${used_collateral:,.0f} · {len(open_pos)} kontrat", delta_color="off")
 oran = used_collateral / cash * 100 if cash else 0
 c3.metric("Teminat / nakit", f"%{oran:.0f}")
 c4.metric("Açık kontrat", len(open_pos))
