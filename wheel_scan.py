@@ -186,6 +186,24 @@ def scan_one(tk, cash, delta_lo=-0.32, delta_hi=-0.18, dte_lo=7, dte_hi=24,
     )
 
 
+def industry_map(symbols):
+    """TV alt-sektoru (industry) — 'Dostum yorumu' tema-cakisma notu icin (user onayi 2026-09-10).
+    Tek toplu istek; hata olursa bos dict (yorum satiri sektorsuz devam eder)."""
+    from tradingview_screener import Query, col
+    symbols = [s for s in dict.fromkeys(symbols) if s]
+    if not symbols:
+        return {}
+    try:
+        _, df = (Query().set_markets("america")
+                 .select("name", "industry")
+                 .where(col("name").isin(symbols))
+                 .limit(len(symbols) + 10)
+                 .get_scanner_data())
+        return {r.name: r.industry for r in df.itertuples() if r.industry == r.industry}
+    except Exception:
+        return {}
+
+
 def beta_of(symbols):
     """Acik bacaklarin SPY betasi (~6 ay) — panel bilgi notu icin. {sym: beta|None}."""
     symbols = list(symbols)

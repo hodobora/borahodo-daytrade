@@ -12,6 +12,7 @@ import streamlit as st
 
 import wheel_scan
 import wheel_store
+import wheel_comment
 
 ET = ZoneInfo("America/New_York")
 GUN_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
@@ -423,6 +424,10 @@ with tab_scan:
         st.session_state["scan_df"] = df
         st.session_state["scan_notes"] = notes
         st.session_state["scan_ts"] = datetime.now(ET).strftime("%H:%M ET")
+        # Alt-sektör (TV industry) — kart etiketi + 'Dostum yorumu' tema çakışması
+        # (user onayı 2026-09-10). SALT BİLGİ: filtre/sıralama/seçim değişmez.
+        st.session_state["scan_ind"] = (wheel_scan.industry_map(list(df["sym"]) + list(open_syms))
+                                        if len(df) else {})
         # IV gecmisine yaz — zamanla kendi IV Rank verimiz olusur
         if len(df):
             wheel_store.log_iv([dict(sym=r.sym, spot=r.spot, atm_iv=r.atm_iv, rv20=r.rv20)
@@ -439,6 +444,15 @@ with tab_scan:
             veri_txt = "karışık: TV canlı + bazı satırlar yfinance ~15dk"
         st.caption(f"Son tarama: {st.session_state.get('scan_ts','?')} · fiyatlar {veri_txt} "
                    "— emir girerken IBKR'deki canlı bid/ask esas")
+        # 'Dostum yorumu' (user onayı 2026-09-10, yer: kartların ÜSTÜ): kartlardaki sayılar +
+        # alt-sektör → tek bilgi satırı. Filtre/sıralama/seçim DEĞİŞMEZ; isim riski/haber yok.
+        try:
+            _ob = _leg_betas(tuple(sorted(open_syms))) if open_syms else {}
+            _yorum = wheel_comment.build(df, open_syms, st.session_state.get("scan_ind", {}), _ob)
+            if _yorum:
+                st.info(_yorum)
+        except Exception as _ex:
+            st.caption(f"Dostum yorumu üretilemedi: {_ex}")
         for r in df.itertuples():
             ivr = wheel_store.get_iv_rank(r.sym, r.atm_iv) if r.atm_iv else None
             ivr_txt = f" · IVR~{ivr}" if ivr is not None else ""
@@ -468,7 +482,9 @@ with tab_scan:
                 a.caption(f"getiri %{r.yield_pct} / {r.dte}g (haftalık %{r.wk_yield}) · "
                           f"Δ{r.delta} · IV {r.iv:.0%} / RV {r.rv20:.0%} (×{r.iv_rv}){ivr_txt}{_btxt}")
                 crush = getattr(r, "crush_flag", "")
-                b.caption(f"teminat ${r.collateral:,} · başabaş ${r.breakeven} · "
+                _ind = st.session_state.get("scan_ind", {}).get(r.sym, "")
+                _indtxt = f"{_ind} · " if _ind else ""
+                b.caption(f"{_indtxt}teminat ${r.collateral:,} · başabaş ${r.breakeven} · "
                           f"spread %{r.spread_pct} · OI {r.oi} · bilanço {r.earnings} "
                           f"{r.earn_flag} {crush}")
         # Düşük-beta bilgi notu (user onayı 2026-08-24): SADECE NOT — filtre/sıralama
