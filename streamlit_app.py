@@ -78,23 +78,20 @@ if wheel_store.LAST_ERROR:
 open_pos = wheel_store.get_wheel(status="open")
 used_collateral = float(open_pos["collateral"].fillna(0).sum()) if len(open_pos) else 0.0
 
-c1, c2, c3, c4 = st.columns(4)
+# user onayi 2026-09-11: ust serit sadelestirildi — tek giris SERBEST TEMINAT (IBKR'daki
+# rakam / user'in belirledigi kapasite), yaninda TOPLAM POZISYON. "Hesap nakiti",
+# "Teminat/nakit %" ve %60/%85 uyarilari kaldirildi (nakit orani olmayinca anlamsiz).
+# Supabase'deki ayni hucre (cash) artik serbest teminati tutar.
+c1, c2 = st.columns(2)
 stored_cash = wheel_store.get_cash()
-cash = c1.number_input("Hesap nakiti ($)", min_value=0,
-                       value=int(st.session_state.get("cash", stored_cash)), step=100)
-st.session_state["cash"] = cash
-if cash != stored_cash:
-    wheel_store.set_cash(cash)  # kalici — her cihazda ayni deger acilir
-# user onayi 2026-09-04: buyuk rakam SERBEST teminat, kullanilan kucuk alt satir
-c2.metric("Serbest teminat", f"${max(cash - used_collateral, 0):,.0f}",
-          delta=f"kullanılan ${used_collateral:,.0f} · {len(open_pos)} kontrat", delta_color="off")
-oran = used_collateral / cash * 100 if cash else 0
-c3.metric("Teminat / nakit", f"%{oran:.0f}")
-c4.metric("Açık kontrat", len(open_pos))
-if oran > 85:
-    st.error("🚨 Teminat/nakit %85 üstü — yeni pozisyon YOK. Cash-secured disiplini: margin asla.")
-elif oran > 60:
-    st.warning("⚠️ Teminat/nakit %60 üstü — tampon inceliyor.")
+free_col = c1.number_input("Serbest teminat ($) — IBKR'daki rakamı gir", min_value=0,
+                           value=int(st.session_state.get("cash", stored_cash)), step=100)
+st.session_state["cash"] = free_col
+if free_col != stored_cash:
+    wheel_store.set_cash(free_col)  # kalici — her cihazda ayni deger acilir
+_n_names = open_pos["sym"].nunique() if len(open_pos) else 0
+c2.metric("Toplam pozisyon", f"${used_collateral:,.0f}",
+          delta=f"{len(open_pos)} kontrat · {_n_names} isim", delta_color="off")
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -271,7 +268,7 @@ for r in open_pos.itertuples():
                       f"${mid:.2f} için {dte_left} gün beklemek şart değil — kapat, "
                       "uygun günde yeni vade sat (yeşil gün CALL, kırmızı gün PUT).")
         # Kiskac hatirlatmasi: CC tasirken nakit varsa ayni isimde CSP
-        if r.kind == "CC" and used_collateral < cash:
+        if r.kind == "CC" and free_col > 0:
             a.caption("💡 Kıskaç: hisse taşırken boşta nakit varsa aynı isimde OTM PUT da "
                       "satılabilir (çift taraflı prim — teminatlı strangle).")
         if mid is not None and mid_src == "yf":
@@ -375,8 +372,8 @@ with tab_scan:
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
     # İsim sayacı (user onayı 2026-09-02): max 4 farklı isim kuralı — SALT BİLGİ, filtre yok
     MAX_NAMES = 4
-    st.caption(f"Serbest nakit (tarama filtresi): ${max(cash - used_collateral, 0):,.0f} "
-               f"= nakit − açık teminat · Açık semboller: {', '.join(sorted(open_syms)) or 'yok'} "
+    st.caption(f"Serbest teminat (tarama filtresi): ${free_col:,.0f} "
+               f"· Açık semboller: {', '.join(sorted(open_syms)) or 'yok'} "
                f"· **{len(open_syms)}/{MAX_NAMES} isim**")
     if len(open_syms) >= MAX_NAMES:
         st.warning(f"⚠️ İsim tavanı dolu ({len(open_syms)}/{MAX_NAMES}) — kural: yeni isim açma, "
@@ -391,7 +388,7 @@ with tab_scan:
                          key="deep_btn", use_container_width=True)
     if run_normal or run_deep:
         deep = run_deep
-        free_cash = max(cash - used_collateral, 0) * margin_mult
+        free_cash = free_col * margin_mult
         if margin_mult > 1.0:
             st.error(f"🟥 MARGIN MODU ×{margin_mult:g} — bu taramadaki büyük kontratlar naked put "
                      f"olur: assign anında strike×100 tutarı MARGIN BORCUYLA karşılanır. "
