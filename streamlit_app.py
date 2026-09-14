@@ -250,9 +250,11 @@ for r in open_pos.itertuples():
         vade_gunu = isinstance(dte_left, int) and dte_left <= 1
         # VADE GUNU (user onayi 2026-09-04): kirmizi ITM kutusu vade gununde GOSTERILMEZ,
         # yerine tek karar notu. ROLL yok (backtest: sistematik roll hesabi sifirladi).
+        # 2026-09-14 (user): ASSIGN YOK — "alternatif: assign kabul" ibaresi kaldirildi,
+        # tek aksiyon KAPAT (backtest --noassign: CAGR 33 / MaxDD -11.4).
         if vade_gunu and itm:
-            a.warning(f"⚖️ VADE GÜNÜ (ITM, {dte_left}g) — **ÖNERİ: KAPAT** (GTC dolmaz, "
-                      "buy-to-close gir) · alternatif: assign kabul · Karar: Bora")
+            a.warning(f"⚖️ VADE GÜNÜ (ITM, {dte_left}g) — **ÖNERİ: KAPAT** — GTC dolmaz, bugün "
+                      "kapanıştan önce BUY-TO-CLOSE gir. Assign yok, roll yok. Karar: Bora")
         elif vade_gunu and not (prog is not None and prog >= 0.75):
             # OTM + vade gunu: degersiz sonlanir, islem gerekmez
             getattr(a, level if level != "caption" else "caption")(msg)
