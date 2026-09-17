@@ -372,10 +372,15 @@ with tab_scan:
         if _spy <= -1.0:
             # 2026-09-17 (user): CC/hisse kuyruklari kaldirildi — hisse ASLA tutulmuyor
             st.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin.")
-        elif _spy >= 1.0:
-            st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz; acele etme.")
         else:
-            st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr; aday kalitesi belirleyici.")
+            # kirmizi degil: KIRMIZI GUN KURALI (user onayi 2026-09-17) — bekle / cuma gir
+            _wd = datetime.now(ET).weekday()
+            _kural = (":red[**Bugün cuma**] — hafta içinde kırmızı gün gelmediyse bugün gir." if _wd == 4
+                      else ":red[**Kırmızı gün bekle**]; cumaya kadar gelmezse cuma gir.")
+            if _spy >= 1.0:
+                st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz. {_kural}")
+            else:
+                st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr. {_kural}")
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
     # İsim sayacı (user onayı 2026-09-02): max 4 farklı isim kuralı — SALT BİLGİ, filtre yok
     MAX_NAMES = 4
