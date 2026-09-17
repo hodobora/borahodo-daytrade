@@ -82,7 +82,13 @@ used_collateral = float(open_pos["collateral"].fillna(0).sum()) if len(open_pos)
 # rakam / user'in belirledigi kapasite), yaninda TOPLAM POZISYON. "Hesap nakiti",
 # "Teminat/nakit %" ve %60/%85 uyarilari kaldirildi (nakit orani olmayinca anlamsiz).
 # Supabase'deki ayni hucre (cash) artik serbest teminati tutar.
-c1, c2 = st.columns(2)
+c1, c2, c3 = st.columns([2, 1, 1.6])
+# KALDIRAC NOTU (user onayi 2026-09-17, secenek 1: SALT NOT, hesap yok): backtest kaldirac merdiveni
+# 1.5x = 10 yilda 0 tasfiye · 2x = 2 tasfiye, en kotu ay -%32 · 3x = 27 tasfiye · 6x = sifir
+c3.markdown(
+    ":red[**KALDIRAÇ KURALI: taahhüt ≤ 2 × özkaynak.**]  \n"
+    ":red[1.5x → 10 yılda 0 tasfiye · 2x → 2 tasfiye, en kötü ay -%32 · 3x → kırılır · 6x → sıfır.]  \n"
+    ":red[Kırmızı gün gelmeden yeni isim yok; cuma son gün.]")
 stored_cash = wheel_store.get_cash()
 free_col = c1.number_input("Serbest teminat ($) — IBKR'daki rakamı gir", min_value=0,
                            value=int(st.session_state.get("cash", stored_cash)), step=100)
