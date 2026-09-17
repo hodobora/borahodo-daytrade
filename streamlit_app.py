@@ -86,7 +86,7 @@ c1, c2, c3 = st.columns([2, 1, 1.6])
 # KALDIRAC NOTU (user onayi 2026-09-17, secenek 1: SALT NOT, hesap yok): backtest kaldirac merdiveni
 # 1.5x = 10 yilda 0 tasfiye · 2x = 2 tasfiye, en kotu ay -%32 · 3x = 27 tasfiye · 6x = sifir
 c3.markdown(
-    ":red[**KALDIRAÇ KURALI: taahhüt ≤ 2 × özkaynak.**]  \n"
+    ":red[**KALDIRAÇ KURALI: Max 2X**]  \n"
     ":red[1.5x → 10 yılda 0 tasfiye · 2x → 2 tasfiye, en kötü ay -%32 · 3x → kırılır · 6x → sıfır.]  \n"
     ":red[Kırmızı gün gelmeden yeni isim yok; cuma son gün.]")
 stored_cash = wheel_store.get_cash()
