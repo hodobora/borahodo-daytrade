@@ -364,11 +364,10 @@ with tab_scan:
     _spy = spy_day()
     if _spy is not None:
         if _spy <= -1.0:
-            st.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin. "
-                     "(Kırmızı sabahta CALL satma)")
+            # 2026-09-17 (user): CC/hisse kuyruklari kaldirildi — hisse ASLA tutulmuyor
+            st.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin.")
         elif _spy >= 1.0:
-            st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz; acele etme. "
-                       "(Hisse varken CALL günü)")
+            st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz; acele etme.")
         else:
             st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr; aday kalitesi belirleyici.")
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
