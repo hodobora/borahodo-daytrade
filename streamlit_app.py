@@ -59,7 +59,35 @@ def market_open_now():
 
 now = datetime.now(ET)
 durum = "🟢 PİYASA AÇIK" if market_open_now() else "🔴 PİYASA KAPALI"
-st.title("🎡 Bora Hodo")  # user 2026-09-17
+@st.cache_data(ttl=900, show_spinner=False)
+def spy_day():
+    try:
+        import yfinance as yf
+        px = yf.Ticker("SPY").history(period="5d")["Close"]
+        return float(px.iloc[-1] / px.iloc[-2] - 1) * 100
+    except Exception:
+        return None
+
+def gun_rengi_banner(container):
+    """Gun rengi + KIRMIZI GUN KURALI (user onayi 2026-09-17). Basligin yaninda gosterilir."""
+    _spy = spy_day()
+    if _spy is None:
+        return
+    if _spy <= -1.0:
+        container.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin.")
+        return
+    _wd = datetime.now(ET).weekday()
+    _kural = (":red[**Bugün cuma**] — hafta içinde kırmızı gün gelmediyse bugün gir." if _wd == 4
+              else ":red[**Kırmızı gün bekle**]; cumaya kadar gelmezse cuma gir.")
+    if _spy >= 1.0:
+        container.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz. {_kural}")
+    else:
+        container.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr. {_kural}")
+
+
+t1, t2 = st.columns([1, 2.2])
+t1.title("🎡 Bora Hodo")  # user 2026-09-17
+gun_rengi_banner(t2)      # user 2026-09-17: banner basligin yaninda
 st.caption(f"NY: {GUN_TR[now.weekday()]} {now.strftime('%d %b %H:%M')} · {durum} · "
            f"Depo: {wheel_store.backend_name()} · Veri: TradingView CANLI "
            "(oturum düşerse yfinance ~15dk) · KARAR: BORA · Emirler IBKR'den")
@@ -101,15 +129,6 @@ _n_names = open_pos["sym"].nunique() if len(open_pos) else 0
 c2.metric("Toplam pozisyon", f"${used_collateral:,.0f}",
           delta=f"{len(open_pos)} kontrat · {_n_names} isim", delta_color="off")
 
-
-@st.cache_data(ttl=900, show_spinner=False)
-def spy_day():
-    try:
-        import yfinance as yf
-        px = yf.Ticker("SPY").history(period="5d")["Close"]
-        return float(px.iloc[-1] / px.iloc[-2] - 1) * 100
-    except Exception:
-        return None
 
 # ---------- POZISYONLAR (ana ekran) ----------
 def current_mid(sym, expiry, strike, kind):
@@ -369,20 +388,7 @@ with tab_scan:
     st.info("Kural hatırlatma: bilanço pencerede olan vade atlanır · sadece taşımaya razı "
             "olduğun hissede sat · limit emir, asla market · kırmızı gün = put satış günü.")
 
-    _spy = spy_day()
-    if _spy is not None:
-        if _spy <= -1.0:
-            # 2026-09-17 (user): CC/hisse kuyruklari kaldirildi — hisse ASLA tutulmuyor
-            st.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin.")
-        else:
-            # kirmizi degil: KIRMIZI GUN KURALI (user onayi 2026-09-17) — bekle / cuma gir
-            _wd = datetime.now(ET).weekday()
-            _kural = (":red[**Bugün cuma**] — hafta içinde kırmızı gün gelmediyse bugün gir." if _wd == 4
-                      else ":red[**Kırmızı gün bekle**]; cumaya kadar gelmezse cuma gir.")
-            if _spy >= 1.0:
-                st.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz. {_kural}")
-            else:
-                st.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr. {_kural}")
+    _spy = spy_day()  # gun rengi bannerı basligin yaninda (2026-09-17); burada sadece Dostum yorumu icin
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
     # İsim sayacı (user onayı 2026-09-02): max 4 farklı isim kuralı — SALT BİLGİ, filtre yok
     MAX_NAMES = 4
