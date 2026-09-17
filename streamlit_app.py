@@ -85,10 +85,12 @@ used_collateral = float(open_pos["collateral"].fillna(0).sum()) if len(open_pos)
 c1, c2, c3 = st.columns([2, 1, 1.6])
 # KALDIRAC NOTU (user onayi 2026-09-17, secenek 1: SALT NOT, hesap yok): backtest kaldirac merdiveni
 # 1.5x = 10 yilda 0 tasfiye · 2x = 2 tasfiye, en kotu ay -%32 · 3x = 27 tasfiye · 6x = sifir
+# 2026-09-17 (user): backtest detay satirlari kaldirildi; iki kural, buyuk punto
 c3.markdown(
-    ":red[**KALDIRAÇ KURALI: Max 2X**]  \n"
-    ":red[1.5x → 10 yılda 0 tasfiye · 2x → 2 tasfiye, en kötü ay -%32 · 3x → kırılır · 6x → sıfır.]  \n"
-    ":red[Kırmızı gün gelmeden yeni isim yok; cuma son gün.]")
+    "<div style='color:#d32f2f;font-size:1.35rem;font-weight:700;line-height:1.5'>"
+    "KALDIRAÇ KURALI: Max 2X<br>"
+    "Her hafta bir giriş günü — ilk kırmızı gün; gelmezse cuma"
+    "</div>", unsafe_allow_html=True)
 stored_cash = wheel_store.get_cash()
 free_col = c1.number_input("Serbest teminat ($) — IBKR'daki rakamı gir", min_value=0,
                            value=int(st.session_state.get("cash", stored_cash)), step=100)
