@@ -74,7 +74,7 @@ def gun_rengi_banner(container):
     if _spy is None:
         return
     if _spy <= -1.0:
-        container.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — PUT SATIŞ GÜNÜ, primler şişkin.")
+        container.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — **PUT SATIŞ GÜNÜ**")
         return
     _wd = datetime.now(ET).weekday()
     _kural = (":red[**Bugün cuma**] — hafta içinde kırmızı gün gelmediyse bugün gir." if _wd == 4
