@@ -59,7 +59,7 @@ def market_open_now():
 
 now = datetime.now(ET)
 durum = "🟢 PİYASA AÇIK" if market_open_now() else "🔴 PİYASA KAPALI"
-st.title("🎡 borahodo-wheel — Opsiyon Satış Paneli")
+st.title("🎡 Bora Hodo")  # user 2026-09-17
 st.caption(f"NY: {GUN_TR[now.weekday()]} {now.strftime('%d %b %H:%M')} · {durum} · "
            f"Depo: {wheel_store.backend_name()} · Veri: TradingView CANLI "
            "(oturum düşerse yfinance ~15dk) · KARAR: BORA · Emirler IBKR'den")
@@ -88,8 +88,8 @@ c1, c2, c3 = st.columns([1.4, 0.9, 2.7])
 # 2026-09-17 (user): backtest detay satirlari kaldirildi; iki kural, buyuk punto
 c3.markdown(
     "<div style='color:#d32f2f;font-size:1.35rem;font-weight:700;line-height:1.5'>"
-    "KALDIRAÇ KURALI: Max 2X<br>"
-    "Her hafta bir giriş. Giriş günü: öncelikli ilk kırmızı gün; eğer kırmızı gelmezse cuma günü."
+    "KALDIRAÇ KURALI: Max 2X<br><br>"
+    "Her hafta bir giriş.<br>Giriş günü: öncelikli ilk kırmızı gün; eğer kırmızı gelmezse cuma günü."
     "</div>", unsafe_allow_html=True)
 stored_cash = wheel_store.get_cash()
 free_col = c1.number_input("Serbest teminat ($) — IBKR'daki rakamı gir", min_value=0,
