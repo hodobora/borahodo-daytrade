@@ -22,10 +22,28 @@ def _tampon(r):
         return None
 
 
-def build(df, open_syms, ind_map, open_betas=None):
+RED_SPY = -1.0  # % — panel "Gun rengi" bannerı ile ayni esik
+
+
+def gun_notu(spy_chg, weekday):
+    """KIRMIZI GUN KURALI (user onayi 2026-09-17, backtest wheel_backtest_redday_2026-09-17.md):
+    put satis gunu = SPY <= -1% olan gun; Pzt-Per kirmizi gelmezse CUMA gir. weekday: 0=Pzt..4=Cum."""
+    if spy_chg is None or spy_chg != spy_chg:
+        return "⚪ Gün rengi okunamadı — kırmızı gün kuralı için SPY'a bak."
+    if spy_chg <= RED_SPY:
+        return f"🔴 **Kırmızı gün (SPY {spy_chg:+.1f}%) — PUT SATIŞ GÜNÜ.**"
+    if weekday == 4:
+        return f"📅 **Cuma (SPY {spy_chg:+.1f}%)** — hafta içinde kırmızı gün gelmediyse **bugün gir**."
+    if weekday is not None and weekday >= 5:
+        return "⚪ Piyasa kapalı — ilk kırmızı günde ya da cuma."
+    return (f"⏳ Bugün kırmızı değil (SPY {spy_chg:+.1f}%) — **kırmızı gün bekle**; "
+            "cumaya kadar gelmezse cuma gir.")
+
+
+def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
     """df: tarama DataFrame'i (skor sirali). open_syms: acik semboller.
     ind_map: {sym: industry} (adaylar + acik). open_betas: {sym: beta|None}.
-    Donus: markdown metni ('' ise yorum yok)."""
+    spy_chg/weekday: kirmizi gun kurali satiri icin. Donus: markdown metni ('' ise yorum yok)."""
     if df is None or not len(df):
         return ""
     open_syms = set(open_syms or [])
@@ -89,7 +107,7 @@ def build(df, open_syms, ind_map, open_betas=None):
             mantikli.append(txt)
 
     n = len(df)
-    parts = [f"💬 **Dostum yorumu** · taramadan {n} aday.", ""]
+    parts = [f"💬 **Dostum yorumu** · taramadan {n} aday.", "", gun_notu(spy_chg, weekday), ""]
     parts.append("**Mantıklı görünen**")
     parts += mantikli if mantikli else ["- bugün yok — temiz aday çıkmadı"]
     if serhli:

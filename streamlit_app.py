@@ -447,7 +447,9 @@ with tab_scan:
         # alt-sektör → tek bilgi satırı. Filtre/sıralama/seçim DEĞİŞMEZ; isim riski/haber yok.
         try:
             _ob = _leg_betas(tuple(sorted(open_syms))) if open_syms else {}
-            _yorum = wheel_comment.build(df, open_syms, st.session_state.get("scan_ind", {}), _ob)
+            # kirmizi gun kurali satiri (user onayi 2026-09-17): SPY gunu + NY haftanin gunu
+            _yorum = wheel_comment.build(df, open_syms, st.session_state.get("scan_ind", {}), _ob,
+                                         spy_chg=_spy, weekday=datetime.now(ET).weekday())
             if _yorum:
                 st.info(_yorum)
         except Exception as _ex:
