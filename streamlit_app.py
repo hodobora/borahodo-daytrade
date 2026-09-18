@@ -279,7 +279,16 @@ for r in open_pos.itertuples():
         # yerine tek karar notu. ROLL yok (backtest: sistematik roll hesabi sifirladi).
         # 2026-09-14 (user): ASSIGN YOK — "alternatif: assign kabul" ibaresi kaldirildi,
         # tek aksiyon KAPAT (backtest --noassign: CAGR 33 / MaxDD -11.4).
-        if vade_gunu and itm:
+        # ERKEN ASSIGN KURALI (user onayi 2026-09-18, BAC dersi): ITM put'ta zaman degeri
+        # (put fiyati - icsel deger) < $0.10 ise assign her an gelebilir -> vadeyi bekleme, KAPAT.
+        zaman_degeri = None
+        if itm and r.kind == "CSP" and mid is not None and spot is not None:
+            zaman_degeri = mid - (float(r.strike) - spot)
+        if zaman_degeri is not None and zaman_degeri < 0.10:
+            a.error(f"🚨 **KAPAT — HİSSE ASSIGN OLABİLİR.** Zaman değeri bitti "
+                    f"(put ${mid:.2f} − içsel ${float(r.strike) - spot:.2f} = ${zaman_degeri:.2f} < $0.10). "
+                    "Vadeyi bekleme, bugün BUY-TO-CLOSE gir.")
+        elif vade_gunu and itm:
             a.warning(f"⚖️ VADE GÜNÜ (ITM, {dte_left}g) — **ÖNERİ: KAPAT** — GTC dolmaz, bugün "
                       "kapanıştan önce BUY-TO-CLOSE gir. Assign yok, roll yok. Karar: Bora")
         elif vade_gunu and not (prog is not None and prog >= 0.75):
