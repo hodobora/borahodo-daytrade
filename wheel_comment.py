@@ -13,6 +13,8 @@ TAMPON_DAR = 3.5    # % — altinda dar
 VRP_GUCLU = 1.5
 SPREAD_DAR = 6.0
 HI_BETA = 1.5
+MIN_PRIM = 25.0     # $ kontrat başı — altı GEÇ (user onayı 2026-09-20, backtest wheel_backtest_redday_2026-09-17.md
+                    # Ek 6: $25 tabanı getiride zararsız, canlıda komisyon payını %9'dan ~%5'e indirir)
 
 
 def _tampon(r):
@@ -93,7 +95,10 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
             arti.append(f"β{b:.2f} 🐢")
 
         try:
-            prim = f"prim \\${float(r.mid) * 100:.0f}"  # \$ — Streamlit markdown'da $..$ LaTeX sayılır
+            prim_val = float(r.mid) * 100
+            prim = f"prim \\${prim_val:.0f}"  # \$ — Streamlit markdown'da $..$ LaTeX sayılır
+            if prim_val < MIN_PRIM:
+                engel.append(f"prim \\${prim_val:.0f} — \\${MIN_PRIM:.0f} altı, komisyon payı büyür")
         except Exception:
             prim = ""
         # user isteği 2026-09-10: her ticker ayrı satır; önerilen yeşil, diğerleri kırmızı
