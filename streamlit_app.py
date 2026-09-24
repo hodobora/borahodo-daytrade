@@ -85,9 +85,26 @@ def gun_rengi_banner(container):
         container.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr. {_kural}")
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _feed_status():
+    try:
+        import tv_options
+        return tv_options.feed_status()
+    except Exception:
+        return "none"
+
+
 t1, t2 = st.columns([1, 2.2])
 t1.title("🎡 Bora Hodo")  # user 2026-09-17
 gun_rengi_banner(t2)      # user 2026-09-17: banner basligin yaninda
+# CANLI VERI BEKCISI (user onayi 2026-09-24): opsiyon verisi streaming degilse en ustte uyari
+_fs = _feed_status()
+if _fs != "streaming":
+    st.error("⚠️ CANLI VERİ YOK — " + (
+        "opsiyon fiyatları ~15 dk gecikmeli (TradingView OPRA aboneliğini kontrol et)."
+        if _fs == "delayed" else
+        "TradingView opsiyon verisi alınamıyor (oturum düşmüş olabilir — TV_SESSIONID'yi yenile).")
+        + " Emirde IBKR'deki canlı fiyat esas.")
 st.caption(f"NY: {GUN_TR[now.weekday()]} {now.strftime('%d %b %H:%M')} · {durum} · "
            f"Depo: {wheel_store.backend_name()} · Veri: TradingView CANLI "
            "(oturum düşerse yfinance ~15dk) · KARAR: BORA · Emirler IBKR'den")

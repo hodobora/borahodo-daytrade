@@ -51,6 +51,23 @@ def _scan(payload):
     return r.json().get("data") or []
 
 
+def feed_status():
+    """Opsiyon verisinin gercekten canli olup olmadigi (user onayi 2026-09-24, OPRA dersi).
+    TV oturum acikken bile OPRA aboneligi yoksa update_mode 'delayed_streaming_900' doner.
+    Donus: 'streaming' | 'delayed' | 'none' (oturum yok / istek basarisiz)."""
+    try:
+        rows = _scan({"columns": ["name", "update_mode"],
+                      "filter": [{"left": "type", "operation": "equal", "right": "option"}],
+                      "index_filters": [{"name": "underlying_symbol", "values": ["AMEX:SPY"]}],
+                      "range": [0, 1]})
+        if not rows:
+            return "none"
+        mode = rows[0]["d"][1]
+        return "streaming" if mode == "streaming" else "delayed"
+    except Exception:
+        return "none"
+
+
 def chain(sym, kind="put", dte_lo=1, dte_hi=40):
     """Underlying'in kontratlari (DTE penceresi) — DataFrame veya None.
     Kolonlar: strike, expiry(date), bid, ask, mid, delta, impliedVolatility, spread_pct
