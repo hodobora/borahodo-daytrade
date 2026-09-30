@@ -101,9 +101,14 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
                 engel.append(f"prim \\${prim_val:.0f} — \\${MIN_PRIM:.0f} altı, komisyon payı büyür")
         except Exception:
             prim = ""
+        # user isteği 2026-09-30: satır sonunda çizgi + 1 kontratın teminatı (strike × 100)
+        try:
+            tem = f" | **1 put = \\${float(r.strike) * 100:,.0f} teminat**"
+        except Exception:
+            tem = ""
         # user isteği 2026-09-10: her ticker ayrı satır; önerilen yeşil, diğerleri kırmızı
         renk = "green" if not (engel or eksi) else "red"
-        txt = f"- :{renk}[**{r.sym}**] {prim} — {', '.join(arti + eksi + engel)}"
+        txt = f"- :{renk}[**{r.sym}**] {prim} — {', '.join(arti + eksi + engel)}{tem}"
         if engel:
             gec.append(txt)
         elif eksi:
