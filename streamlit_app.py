@@ -69,20 +69,17 @@ def spy_day():
         return None
 
 def gun_rengi_banner(container):
-    """Gun rengi + KIRMIZI GUN KURALI (user onayi 2026-09-17). Basligin yaninda gosterilir."""
+    """Gun rengi — SALT BILGI. 2026-09-30 (user): kirmizi gun / cuma giris kurali kaldirildi,
+    tavsiye cumleleri silindi; her gun taranir, gun gun degerlendirilir."""
     _spy = spy_day()
     if _spy is None:
         return
     if _spy <= -1.0:
-        container.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — **PUT SATIŞ GÜNÜ**")
-        return
-    _wd = datetime.now(ET).weekday()
-    _kural = (":red[**Bugün cuma**] — hafta içinde kırmızı gün gelmediyse bugün gir." if _wd == 4
-              else ":red[**Kırmızı gün bekle**]; cumaya kadar gelmezse cuma gir.")
-    if _spy >= 1.0:
-        container.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz. {_kural}")
+        container.error(f"🔴 Gün rengi: SPY {_spy:+.1f}% — kırmızı gün, primler şişik.")
+    elif _spy >= 1.0:
+        container.success(f"🟢 Gün rengi: SPY {_spy:+.1f}% — primler ucuz.")
     else:
-        container.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr. {_kural}")
+        container.info(f"⚪ Gün rengi: SPY {_spy:+.1f}% — yatay/nötr.")
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -412,7 +409,7 @@ with tab_scan:
         universe = [s.strip().upper() for s in uni_text.split(",") if s.strip()]
 
     st.info("Kural hatırlatma: bilanço pencerede olan vade atlanır · sadece taşımaya razı "
-            "olduğun hissede sat · limit emir, asla market · kırmızı gün = put satış günü.")
+            "olduğun hissede sat · limit emir, asla market.")
 
     _spy = spy_day()  # gun rengi bannerı basligin yaninda (2026-09-17); burada sadece Dostum yorumu icin
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()

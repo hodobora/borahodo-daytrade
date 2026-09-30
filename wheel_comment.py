@@ -117,7 +117,8 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
             mantikli.append(txt)
 
     n = len(df)
-    parts = [f"💬 **Dostum yorumu** · taramadan {n} aday.", "", gun_notu(spy_chg, weekday), ""]
+    # 2026-09-30 (user): gun_notu (kirmizi gun / cuma kurali satiri) kaldirildi
+    parts = [f"💬 **Dostum yorumu** · taramadan {n} aday.", ""]
     parts.append("**Mantıklı görünen**")
     parts += mantikli if mantikli else ["- bugün yok — temiz aday çıkmadı"]
     if serhli:
