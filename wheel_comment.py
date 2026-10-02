@@ -13,6 +13,28 @@ TAMPON_DAR = 3.5    # % — altinda dar
 VRP_GUCLU = 1.5
 SPREAD_DAR = 6.0
 HI_BETA = 1.5
+YENI_HISSE_GUN = 126  # islem gunu (~6 ay) — halka arzdan bu kadar gecmemisse Serhli (user onayi 2026-10-02, QNT dersi;
+                      # backtest wheel_backtest_calls_2026-10-02_dusus.md: 2x cukur -40.5 -> -36.4, getiri ayni)
+_YAS_CACHE = {}
+
+
+def _yas_gunleri(syms):
+    """Son 1 yildaki gunluk kapanis sayisi (islem gunu). <126 = halka arzdan 6 ay gecmemis. Hata -> None (isaret yok)."""
+    need = [s for s in syms if s not in _YAS_CACHE]
+    if need:
+        try:
+            import yfinance as yf
+            d = yf.download(need, period="1y", auto_adjust=True, progress=False)["Close"]
+            if not hasattr(d, "columns"):
+                d = d.to_frame(need[0])
+            for s in need:
+                _YAS_CACHE[s] = int(d[s].notna().sum()) if s in d.columns else None
+        except Exception:
+            for s in need:
+                _YAS_CACHE.setdefault(s, None)
+    return {s: _YAS_CACHE.get(s) for s in syms}
+
+
 MIN_PRIM = 25.0     # $ kontrat başı — altı GEÇ (user onayı 2026-09-20, backtest wheel_backtest_redday_2026-09-17.md
                     # Ek 6: $25 tabanı getiride zararsız, canlıda komisyon payını %9'dan ~%5'e indirir)
 
@@ -57,6 +79,7 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
     hi_beta_open = sum(1 for b in (open_betas or {}).values() if b is not None and b > HI_BETA)
 
     mantikli, serhli, gec = [], [], []
+    yas = _yas_gunleri([str(x) for x in df["sym"]]) if "sym" in df.columns else {}
     for r in df.itertuples():
         if getattr(r, "earn_flag", ""):
             continue  # kartta zaten 🚫 / ⚠️
@@ -75,6 +98,10 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
                 arti.append(f"tampon %{t:.1f}")
             elif t < TAMPON_DAR:
                 eksi.append(f"tampon %{t:.1f} dar")
+        # --- yeni hisse (halka arzdan 6 ay gecmemis -> Serhli)
+        g = yas.get(r.sym)
+        if g is not None and g < YENI_HISSE_GUN:
+            eksi.append(f"halka arzdan 6 ay geçmedi (~{max(1, round(g / 21))} ay)")
         # --- VRP / spread
         if float(r.iv_rv) >= VRP_GUCLU:
             arti.append(f"VRP ×{float(r.iv_rv):.2f}")
