@@ -5,7 +5,7 @@ Tarama: yfinance (~15dk gecikme) — kontrat SECIMI icin yeterli, nihai fiyat IB
 Emir gonderme YOK — panel sinyal + kayit + takip. KARAR: BORA.
 Onceki LUK Model V1 portali rafa kalkti (git gecmisinde duruyor).
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
@@ -16,6 +16,9 @@ import wheel_comment
 
 ET = ZoneInfo("America/New_York")
 GUN_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
+GUN_BUYUK = ["PAZARTESİ", "SALI", "ÇARŞAMBA", "PERŞEMBE", "CUMA", "CUMARTESİ", "PAZAR"]
+# NYSE'nin CUMA tatilleri (kural: cuma tatilse giris persembe). Elle liste — 2028 icin guncelle.
+CUMA_TATIL = {date(2026, 12, 25), date(2027, 1, 1), date(2027, 3, 26), date(2027, 6, 18), date(2027, 12, 24)}
 
 st.set_page_config(page_title="borahodo-wheel", page_icon="🎡", layout="wide")
 
@@ -90,6 +93,24 @@ def _feed_status():
     except Exception:
         return "none"
 
+
+def giris_gunu_metni(d):
+    """GIRIS GUNU SERIDI (user istegi 2026-10-05, kural: yeni put YALNIZ CUMA).
+    Cuma yesil 'UYGUN', diger gunler siyah 'UYGUN DEGIL'; cuma tatilse persembe yesil."""
+    wd = d.weekday()
+    gun = GUN_BUYUK[wd]
+    if wd == 4 and d in CUMA_TATIL:
+        return f"BUGÜN {gun} BORSA KAPALI", "#000000"
+    if wd == 4:
+        return f"BUGÜN {gun} PUT SATIŞI UYGUN", "#1e8e3e"
+    if wd == 3 and d + timedelta(days=1) in CUMA_TATIL:
+        return f"BUGÜN {gun} PUT SATIŞI UYGUN (CUMA BORSA KAPALI)", "#1e8e3e"
+    return f"BUGÜN {gun} PUT SATIŞI UYGUN DEĞİL", "#000000"
+
+
+_gg_txt, _gg_renk = giris_gunu_metni(now.date())   # NY tarihi (baslik satiriyla ayni)
+st.markdown(f"<div style='color:{_gg_renk};font-size:2.75rem;font-weight:700;line-height:1.2;"
+            f"padding:0.25rem 0 0.75rem 0'>{_gg_txt}</div>", unsafe_allow_html=True)
 
 t1, t2 = st.columns([1, 2.2])
 t1.title("🎡 Bora Hodo")  # user 2026-09-17
