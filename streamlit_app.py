@@ -71,6 +71,23 @@ def spy_day():
     except Exception:
         return None
 
+
+VIX_MAX = 25.0  # VIX kapısı (user onayı 2026-10-14): önceki işlem günü kapanışı > 25 ise yeni put satılmaz
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def vix_gate():
+    """(önceki işlem günü kapanışı, son değer) — VIX kapısı uyarısı için, SALT BİLGİ.
+    Backtest kararı bir önceki günün kapanışıyla verdi (grid_bot wheel_backtest_brainstorm_2026-10-13.md, Ek 5)."""
+    try:
+        import yfinance as yf
+        h = yf.Ticker("^VIX").history(period="10d")["Close"].dropna()
+        today = datetime.now(ET).date()
+        prev = h[[d.date() < today for d in h.index]]
+        return (float(prev.iloc[-1]) if len(prev) else None), float(h.iloc[-1])
+    except Exception:
+        return None, None
+
 def gun_rengi_banner(container):
     """Gun rengi — SALT BILGI. 2026-09-30 (user): kirmizi gun / cuma giris kurali kaldirildi,
     tavsiye cumleleri silindi; her gun taranir, gun gun degerlendirilir."""
@@ -516,6 +533,16 @@ with tab_scan:
                 st.info(_yorum)
         except Exception as _ex:
             st.caption(f"Dostum yorumu üretilemedi: {_ex}")
+        # VIX kapısı (user onayı 2026-10-14): önceki işlem günü kapanışı > VIX_MAX ise uyarı.
+        # SALT BİLGİ — tarama/sıralama/seçim değişmez.
+        _vp, _vl = vix_gate()
+        if _vp is None:
+            st.caption("VIX verisi alınamadı — VIX kuralını IBKR/TradingView'den elle kontrol et (eşik 25).")
+        elif _vp > VIX_MAX:
+            st.error(f"🟥 VIX önceki kapanış {_vp:.1f} (> {VIX_MAX:.0f}) — bugün yeni put satışı için "
+                     f"UYGUN DEĞİL (VIX kuralı). Şu an: {_vl:.1f}")
+        else:
+            st.caption(f"✅ VIX önceki kapanış {_vp:.1f} (eşik {VIX_MAX:.0f}) — VIX kuralı: uygun · şu an {_vl:.1f}")
         for r in df.itertuples():
             ivr = wheel_store.get_iv_rank(r.sym, r.atm_iv) if r.atm_iv else None
             ivr_txt = f" · IVR~{ivr}" if ivr is not None else ""
