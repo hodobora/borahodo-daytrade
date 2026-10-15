@@ -39,7 +39,7 @@ MIN_PRIM = 25.0     # $ kontrat başı — altı GEÇ (user onayı 2026-09-20, b
                     # Ek 6: $25 tabanı getiride zararsız, canlıda komisyon payını %9'dan ~%5'e indirir)
 
 
-ATR_K = 1.75        # ATR tamponu (user onayi 2026-10-15, SALT BILGI): strike >= ATR_K x ATR14 uzak olmali, degilse
+ATR_K = 1.75        # ATR tamponu — KURAL (Bora karari 2026-10-15; once bilgi notuydu): strike >= ATR_K x ATR14 uzak olmali, degilse
 ATR_N = 14          # spot - ATR_K x ATR14 altindaki ilk listeli strike; onun primi < MIN_PRIM ise isim ATLA.
                     # Backtest: grid_bot wheel_piyasa_rejimi_2026-10-15.md (2x 42.2/-23.1 -> 40.0/-16.7; bagimsiz dogrulandi)
 _ATR_CACHE = {}     # (sym, NY tarihi) -> (deger|None, zaman); None 15 dk sonra yeniden denenir
@@ -274,8 +274,8 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
     if gec:
         parts += ["", "**Geç**"] + gec
     parts += ["", "_Sayılardan türetilmiş not — isim riski/haber burada yok. Karar: Bora._",
-              f"_ATR notu: strike, spot − {ATR_K:g} × ATR14 altına çekilir; o strike'ın primi \\${MIN_PRIM:.0f} altıysa "
-              "isim atlanır (backtest 15 Eki, salt bilgi; seçim değişmez). ATR = son 14 tamamlanmış günün "
+              f"_ATR KURALI (15 Eki): strike, spot − {ATR_K:g} × ATR14 altına çekilir ve o strike satılır; primi \\${MIN_PRIM:.0f} altıysa "
+              "isim atlanır. (Panel listeyi yeniden sıralamaz; kuralı bu not gösterir.) ATR = son 14 tamamlanmış günün "
               "max(kapanış, önceki kapanış) − min(dip, önceki kapanış) ortalaması; TradingView'in hazır ATR'si değil. "
               "Strike/prim TradingView canlı zincirinden; ATR'nin 14 günlük geçmişi Yahoo günlük barlarından "
               "(TradingView bu geçmişi vermiyor; barlar TradingView ile birebir aynı)._"]
