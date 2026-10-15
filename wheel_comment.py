@@ -39,6 +39,121 @@ MIN_PRIM = 25.0     # $ kontrat başı — altı GEÇ (user onayı 2026-09-20, b
                     # Ek 6: $25 tabanı getiride zararsız, canlıda komisyon payını %9'dan ~%5'e indirir)
 
 
+ATR_K = 1.75        # ATR tamponu (user onayi 2026-10-15, SALT BILGI): strike >= ATR_K x ATR14 uzak olmali, degilse
+ATR_N = 14          # spot - ATR_K x ATR14 altindaki ilk listeli strike; onun primi < MIN_PRIM ise isim ATLA.
+                    # Backtest: grid_bot wheel_piyasa_rejimi_2026-10-15.md (2x 42.2/-23.1 -> 40.0/-16.7; bagimsiz dogrulandi)
+_ATR_CACHE = {}     # (sym, NY tarihi) -> (deger|None, zaman); None 15 dk sonra yeniden denenir
+_EXP_CACHE = {}     # (sym, vade) -> (DataFrame|None, zaman); 15 dk — her yenilemede TV'ye gitmesin (TV 429 veriyor)
+_TTL = 900
+
+
+def _ny_today():
+    from datetime import datetime, timezone, timedelta
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        return (datetime.now(timezone.utc) - timedelta(hours=4)).date()
+
+
+def _atr_map(syms):
+    """ATR14, BACKTEST TANIMIYLA: TR = max(C_t, C_t-1) - min(L_t, C_t-1); son 14 TAMAMLANMIS gunun ortalamasi.
+    Bugunun (New York) bari kullanilmaz -> Cuma taramasinda Persembe kapanisi ATR'si (backtest --g3atrlag ile ayni).
+    TradingView/broker ATR'si DEGIL (gunun tepesini de icerir, ~1.35x buyuk). Hata -> None (not 'okunamadi' der)."""
+    import time
+    today, now = _ny_today(), time.time()
+
+    def _fresh(s):
+        v = _ATR_CACHE.get((s, today))
+        return v is not None and (v[0] is not None or now - v[1] < _TTL)
+
+    need = [s for s in syms if not _fresh(s)]
+    if need:
+        got = {}
+        try:
+            import pandas as pd
+            import yfinance as yf
+            d = yf.download(need, period="3mo", interval="1d", auto_adjust=True, progress=False)
+            C, L = d["Close"], d["Low"]
+            if not hasattr(C, "columns"):
+                C, L = C.to_frame(need[0]), L.to_frame(need[0])
+            for s in need:
+                if s in C.columns and s in L.columns:
+                    x = pd.DataFrame({"c": C[s], "l": L[s]}).dropna()
+                    x = x[[ix.date() < today for ix in x.index]]
+                    if len(x) >= ATR_N + 1:
+                        pc = x["c"].shift(1)
+                        tr = (pd.concat([x["c"], pc], axis=1).max(axis=1)
+                              - pd.concat([x["l"], pc], axis=1).min(axis=1))
+                        got[s] = float(tr.iloc[-ATR_N:].mean())
+        except Exception:
+            pass
+        for s in need:
+            _ATR_CACHE[(s, today)] = (got.get(s), now)
+    return {s: (_ATR_CACHE.get((s, today)) or (None, 0))[0] for s in syms}
+
+
+def _vade_zinciri(sym, expiry):
+    """Adayin KENDI vadesindeki put zinciri (TV, tek vade -> 400 satir siniri kesmez). DataFrame(strike,bid,ask,mid) | None."""
+    import time
+    import pandas as pd
+    key = (sym, str(expiry)[:10])
+    hit = _EXP_CACHE.get(key)
+    if hit is not None and time.time() - hit[1] < _TTL:
+        return hit[0]
+    df = None
+    try:
+        import tv_options
+        full = tv_options.resolve(sym)
+        if full:
+            e = int(pd.Timestamp(expiry).strftime("%Y%m%d"))
+            data = tv_options._scan({
+                "columns": ["name", "option-type", "strike", "expiration", "bid", "ask", "delta", "iv"],
+                "index_filters": [{"name": "underlying_symbol", "values": [full]}],
+                "filter": [{"left": "option-type", "operation": "equal", "right": "put"},
+                           {"left": "expiration", "operation": "in_range", "right": [e, e]}],
+                "range": [0, 400]})
+            rows = []
+            for it in data:
+                _n, _t, K, _e, bid, ask = it["d"][:6]
+                if K is None:
+                    continue
+                bid = float(bid or 0.0)
+                ask = float(ask or 0.0)
+                rows.append(dict(strike=float(K), bid=bid, ask=ask, mid=(bid + ask) / 2))
+            df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["strike", "bid", "ask", "mid"])
+    except Exception:
+        df = None
+    _EXP_CACHE[key] = (df, time.time())
+    return df
+
+
+def atr_notu(r, atr):
+    """Tek aday icin ATR notu. Iki durum: 'ATR ✓' (gerekirse kurala uygun strike + prim) / 'ATR: kurala gore ATLA'.
+    Veri yoksa 'ATR okunamadi' / 'zincir okunamadi'. Secim/renk/grup DEGISMEZ.
+    Canlida listedeki ilk strike <= sinir alinir (backtest 0.5'lik adim) -> canli biraz daha temkinli."""
+    try:
+        S, K = float(r.spot), float(r.strike)
+    except Exception:
+        return "ATR okunamadı"
+    if atr is None or atr != atr or atr <= 0:
+        return "ATR okunamadı"
+    lim = S - ATR_K * atr
+    if K <= lim + 1e-9:
+        return "**ATR ✓**"
+    ch = _vade_zinciri(r.sym, getattr(r, "expiry", None))
+    if ch is None or not len(ch):
+        return f"ATR: strike ≤ \\${lim:.2f} olmalı — zincir okunamadı"
+    alt = ch[(ch["strike"] <= lim + 1e-9) & (ch["bid"] > 0)]
+    if not len(alt):
+        return "**ATR: kurala göre ATLA** (sınırın altında alıcılı strike yok)"
+    best = alt.sort_values("strike").iloc[-1]
+    prem = float(best["mid"]) * 100
+    if prem < MIN_PRIM:
+        return f"**ATR: kurala göre ATLA** ({float(best['strike']):g}P \\${prem:.0f})"
+    return f"**ATR ✓ {float(best['strike']):g}P · \\${prem:.0f}**"
+
+
 def _tampon(r):
     try:
         return (float(r.spot) - float(r.strike)) / float(r.spot) * 100
@@ -80,6 +195,7 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
 
     mantikli, serhli, gec = [], [], []
     yas = _yas_gunleri([str(x) for x in df["sym"]]) if "sym" in df.columns else {}
+    atrs = _atr_map([str(x) for x in df["sym"]]) if "sym" in df.columns else {}
     for r in df.itertuples():
         if getattr(r, "earn_flag", ""):
             continue  # kartta zaten 🚫 / ⚠️
@@ -135,7 +251,12 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
             tem = ""
         # user isteği 2026-09-10: her ticker ayrı satır; önerilen yeşil, diğerleri kırmızı
         renk = "green" if not (engel or eksi) else "red"
-        txt = f"- :{renk}[**{r.sym}**] {prim} — {', '.join(arti + eksi + engel)}{tem}"
+        # 2026-10-15 (user onayi): ATR tamponu notu satir sonunda — SALT BILGI, renk/grup degismez
+        try:
+            atr_txt = f" | {atr_notu(r, atrs.get(r.sym))}"
+        except Exception:
+            atr_txt = " | ATR okunamadı"
+        txt = f"- :{renk}[**{r.sym}**] {prim} — {', '.join(arti + eksi + engel)}{tem}{atr_txt}"
         if engel:
             gec.append(txt)
         elif eksi:
@@ -152,5 +273,10 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
         parts += ["", "**Şerhli**"] + serhli
     if gec:
         parts += ["", "**Geç**"] + gec
-    parts += ["", "_Sayılardan türetilmiş not — isim riski/haber burada yok. Karar: Bora._"]
+    parts += ["", "_Sayılardan türetilmiş not — isim riski/haber burada yok. Karar: Bora._",
+              f"_ATR notu: strike, spot − {ATR_K:g} × ATR14 altına çekilir; o strike'ın primi \\${MIN_PRIM:.0f} altıysa "
+              "isim atlanır (backtest 15 Eki, salt bilgi; seçim değişmez). ATR = son 14 tamamlanmış günün "
+              "max(kapanış, önceki kapanış) − min(dip, önceki kapanış) ortalaması; TradingView'in hazır ATR'si değil. "
+              "Strike/prim TradingView canlı zincirinden; ATR'nin 14 günlük geçmişi Yahoo günlük barlarından "
+              "(TradingView bu geçmişi vermiyor; barlar TradingView ile birebir aynı)._"]
     return "\n".join(parts)
