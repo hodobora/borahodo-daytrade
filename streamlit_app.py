@@ -151,9 +151,11 @@ if wheel_store.LAST_ERROR:
                     "2. Aşağıyı yapıştır → **Run**  \n"
                     "3. Bu paneli yenile — uyarı kalkar.")
         try:
-            st.code(open("schema_wheel.sql", encoding="utf-8").read(), language="sql")
+            import os as _os  # 2026-10-15: panel/ alt klasorune tasindi; Streamlit Cloud repo kokunden calistirir
+            st.code(open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "schema_wheel.sql"),
+                         encoding="utf-8").read(), language="sql")
         except Exception:
-            st.text("schema_wheel.sql repo kökünde")
+            st.text("schema_wheel.sql panel/ klasöründe")
 
 open_pos = wheel_store.get_wheel(status="open")
 used_collateral = float(open_pos["collateral"].fillna(0).sum()) if len(open_pos) else 0.0
