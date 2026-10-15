@@ -140,7 +140,7 @@ def atr_notu(r, atr):
         return "ATR okunamadı"
     lim = S - ATR_K * atr
     if K <= lim + 1e-9:
-        return "**ATR ✓**"
+        return "**ATR ✓** — karttaki emir geçerli"
     ch = _vade_zinciri(r.sym, getattr(r, "expiry", None))
     if ch is None or not len(ch):
         return f"ATR: strike ≤ \\${lim:.2f} olmalı — zincir okunamadı"
@@ -151,7 +151,11 @@ def atr_notu(r, atr):
     prem = float(best["mid"]) * 100
     if prem < MIN_PRIM:
         return f"**ATR: kurala göre ATLA** ({float(best['strike']):g}P \\${prem:.0f})"
-    return f"**ATR ✓ {float(best['strike']):g}P · \\${prem:.0f}**"
+    # 2026-10-15 (Bora onayi): strike degistiyse TAM EMIR — kartlardaki satirla ayni bicim; GTC = satis x 0.25 (%75 kurali, wheel_scan gtc_target ile ayni)
+    mid = float(best["mid"])
+    exp = str(getattr(r, "expiry", ""))[:10]
+    return (f"**ATR ✓ → SELL 1 {r.sym} {exp} {float(best['strike']):g}P @ limit {mid:.2f}** · dolunca "
+            f"**BUY 1 aynı kontrat @ limit {round(mid * 0.25, 2):.2f} GTC** (%75 kuralı)")
 
 
 def _tampon(r):
@@ -275,7 +279,8 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
         parts += ["", "**Geç**"] + gec
     parts += ["", "_Sayılardan türetilmiş not — isim riski/haber burada yok. Karar: Bora._",
               f"_ATR KURALI (15 Eki): strike, spot − {ATR_K:g} × ATR14 altına çekilir ve o strike satılır; primi \\${MIN_PRIM:.0f} altıysa "
-              "isim atlanır. (Panel listeyi yeniden sıralamaz; kuralı bu not gösterir.) ATR = son 14 tamamlanmış günün "
+              "isim atlanır. Notta 'ATR ✓ → SELL …' yazıyorsa KARTTAKİ DEĞİL NOTTAKİ emir geçerlidir (GTC = gerçek dolum × 0.25). "
+              "(Panel listeyi yeniden sıralamaz; kuralı bu not gösterir.) ATR = son 14 tamamlanmış günün "
               "max(kapanış, önceki kapanış) − min(dip, önceki kapanış) ortalaması; TradingView'in hazır ATR'si değil. "
               "Strike/prim TradingView canlı zincirinden; ATR'nin 14 günlük geçmişi Yahoo günlük barlarından "
               "(TradingView bu geçmişi vermiyor; barlar TradingView ile birebir aynı)._"]
