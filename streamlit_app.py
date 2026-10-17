@@ -170,12 +170,13 @@ c1, c2, c3 = st.columns([1.4, 0.9, 2.7])
 # 2026-09-17 (user): backtest detay satirlari kaldirildi; iki kural, buyuk punto
 # 2026-09-30 (user): 'Her hafta bir giris / kirmizi gun-cuma' satiri kaldirildi — gun gun tarama
 # 2026-10-15 (Bora karari): tavan 2x -> 2.5x, ATR tamponu kuraliyla birlikte (backtest 2.5x+ATR 51.0/-20.9, $5.5k 42.6/-20.5)
+# 2026-10-17 (Bora): "her zaman parayı %25'e böl" — girilen tutar KALDIRAÇLI TOPLAM, isim başı dilim = tutar/4
 c3.markdown(
     "<div style='color:#d32f2f;font-size:1.35rem;font-weight:700;line-height:1.5'>"
-    "KALDIRAÇ KURALI: Max 2.5X"
+    "KALDIRAÇ KURALI: Max 2.5X<br>İSİM BAŞI: TUTAR / 4"
     "</div>", unsafe_allow_html=True)
 stored_cash = wheel_store.get_cash()
-free_col = c1.number_input("Serbest teminat ($) — IBKR'daki rakamı gir", min_value=0,
+free_col = c1.number_input("Tarama tutarı ($) — kaldıraçlı toplam (isim başı dilim = tutar/4)", min_value=0,
                            value=int(st.session_state.get("cash", stored_cash)), step=100)
 st.session_state["cash"] = free_col
 if free_col != stored_cash:
@@ -456,7 +457,10 @@ with tab_scan:
     open_syms = set(open_pos["sym"]) if len(open_pos) else set()
     # İsim sayacı (user onayı 2026-09-02): max 4 farklı isim kuralı — SALT BİLGİ, filtre yok
     MAX_NAMES = 4
-    st.caption(f"Serbest teminat (tarama filtresi): ${free_col:,.0f} "
+    # İsim başı dilim (Bora 2026-10-17): tek kontrat teminatı (strike×100) <= tutar/4 — tarama filtresi
+    _slot = free_col * margin_mult / 4
+    st.caption(f"Tarama tutarı: ${free_col:,.0f} · **isim başı dilim (tutar/4): ${_slot:,.0f} → "
+               f"strike ≤ ${_slot / 100:,.1f}** "
                f"· Açık semboller: {', '.join(sorted(open_syms)) or 'yok'} "
                f"· **{len(open_syms)}/{MAX_NAMES} isim**")
     if len(open_syms) >= MAX_NAMES:
@@ -472,7 +476,8 @@ with tab_scan:
                          key="deep_btn", use_container_width=True)
     if run_normal or run_deep:
         deep = run_deep
-        free_cash = free_col * margin_mult
+        # filtre = isim başı dilim (tutar/4), tutarın tamamı değil (2026-10-17; NOW 139P dersi)
+        free_cash = free_col * margin_mult / 4
         if margin_mult > 1.0:
             st.error(f"🟥 MARGIN MODU ×{margin_mult:g} — bu taramadaki büyük kontratlar naked put "
                      f"olur: assign anında strike×100 tutarı MARGIN BORCUYLA karşılanır. "
@@ -616,6 +621,6 @@ with tab_journal:
                      use_container_width=True, hide_index=True)
     else:
         st.info("Kapanan işlem yok henüz.")
-    st.caption("Kurallar: prim %75'te kapat · kontrat sayısı nakitin izin verdiği kadar "
-               "(margin asla) · 3+ bacakta en az 1 düşük-beta · strike = 'o fiyattan "
+    st.caption("Kurallar: prim %75'te kapat · isim başı teminat ≤ tutar/4 · kaldıraç ≤ 2.5x "
+               "· 3+ bacakta en az 1 düşük-beta · strike = 'o fiyattan "
                "taşımaya razıyım' testi · bilanço vadeli kontrat satılmaz.")
