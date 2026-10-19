@@ -537,7 +537,8 @@ with tab_scan:
             _ob = _leg_betas(tuple(sorted(open_syms))) if open_syms else {}
             # kirmizi gun kurali satiri (user onayi 2026-09-17): SPY gunu + NY haftanin gunu
             _yorum = wheel_comment.build(df, open_syms, st.session_state.get("scan_ind", {}), _ob,
-                                         spy_chg=_spy, weekday=datetime.now(ET).weekday())
+                                         spy_chg=_spy, weekday=datetime.now(ET).weekday(),
+                                         slot=_slot)
             if _yorum:
                 st.info(_yorum)
         except Exception as _ex:
@@ -577,6 +578,10 @@ with tab_scan:
                             f"(bilanço sonrası tekrar bak)")
                 else:
                     emir = f"`{r.order}`"
+                # 2026-10-19 (Bora onayi): kontrat sayisi = floor(dilim / (strike x 100)), dilim = tutar/4
+                _n = wheel_comment.kontrat(r.strike, _slot)
+                if _n > 1 and not r.earn_flag:
+                    emir = emir.replace("SELL 1 ", f"SELL {_n} ", 1)
                 dchg = getattr(r, "day_chg", None)
                 gun = ""
                 if dchg is not None:
@@ -584,7 +589,7 @@ with tab_scan:
                     gun = f" {dot}{dchg:+.1f}%"
                 a.markdown(f"**{renk} {r.sym}** ${r.spot}{gun} · {emir}{dup}")
                 if not r.earn_flag:
-                    a.caption(f"✂️ satış dolunca hemen ekle → BUY 1 aynı kontrat "
+                    a.caption(f"✂️ satış dolunca hemen ekle → BUY {_n} aynı kontrat "
                               f"@ limit {getattr(r, 'gtc_target', 0):.2f} · TIF: GTC (%75 kuralı)")
                 _b = getattr(r, "beta", None)
                 _btxt = (f" · β{_b:.2f}" + (" 🐢" if _b < 0.8 else "")) if _b is not None and _b == _b else ""
@@ -593,7 +598,9 @@ with tab_scan:
                 crush = getattr(r, "crush_flag", "")
                 _ind = st.session_state.get("scan_ind", {}).get(r.sym, "")
                 _indtxt = f"{_ind} · " if _ind else ""
-                b.caption(f"{_indtxt}teminat ${r.collateral:,} · başabaş ${r.breakeven} · "
+                _tem = (f"teminat ${r.collateral:,} ×{_n} = ${r.collateral * _n:,}"
+                        if _n > 1 and not r.earn_flag else f"teminat ${r.collateral:,}")
+                b.caption(f"{_indtxt}{_tem} · başabaş ${r.breakeven} · "
                           f"spread %{r.spread_pct} · OI {r.oi} · bilanço {r.earnings} "
                           f"{r.earn_flag} {crush}")
         # Düşük-beta bilgi notu (user onayı 2026-08-24): SADECE NOT — filtre/sıralama

@@ -128,7 +128,19 @@ def _vade_zinciri(sym, expiry):
     return df
 
 
-def atr_notu(r, atr):
+def kontrat(strike, slot):
+    """Dilime sigan kontrat sayisi (Bora 2026-10-19): floor(dilim / (strike x 100)), en az 1.
+    Dilim = tarama tutari / 4 (kaldiracli toplam). Dilim bilinmiyorsa 1."""
+    try:
+        k = float(strike) * 100
+        if not slot or k <= 0:
+            return 1
+        return max(1, int(float(slot) // k))
+    except Exception:
+        return 1
+
+
+def atr_notu(r, atr, slot=None):
     """Tek aday icin ATR notu. Iki durum: 'ATR ✓' (gerekirse kurala uygun strike + prim) / 'ATR: kurala gore ATLA'.
     Veri yoksa 'ATR okunamadi' / 'zincir okunamadi'. Secim/renk/grup DEGISMEZ.
     Canlida listedeki ilk strike <= sinir alinir (backtest 0.5'lik adim) -> canli biraz daha temkinli."""
@@ -154,8 +166,10 @@ def atr_notu(r, atr):
     # 2026-10-15 (Bora onayi): strike degistiyse TAM EMIR — kartlardaki satirla ayni bicim; GTC = satis x 0.25 (%75 kurali, wheel_scan gtc_target ile ayni)
     mid = float(best["mid"])
     exp = str(getattr(r, "expiry", ""))[:10]
-    return (f"**ATR ✓ → SELL 1 {r.sym} {exp} {float(best['strike']):g}P @ limit {mid:.2f}** · dolunca "
-            f"**BUY 1 aynı kontrat @ limit {round(mid * 0.25, 2):.2f} GTC** (%75 kuralı)")
+    # 2026-10-19 (Bora onayi): kontrat sayisi dilime gore (NOTTAKI strike ile)
+    n = kontrat(best["strike"], slot)
+    return (f"**ATR ✓ → SELL {n} {r.sym} {exp} {float(best['strike']):g}P @ limit {mid:.2f}** · dolunca "
+            f"**BUY {n} aynı kontrat @ limit {round(mid * 0.25, 2):.2f} GTC** (%75 kuralı)")
 
 
 def _tampon(r):
@@ -183,10 +197,11 @@ def gun_notu(spy_chg, weekday):
             "cumaya kadar gelmezse cuma gir.")
 
 
-def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
+def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None, slot=None):
     """df: tarama DataFrame'i (skor sirali). open_syms: acik semboller.
     ind_map: {sym: industry} (adaylar + acik). open_betas: {sym: beta|None}.
-    spy_chg/weekday: kirmizi gun kurali satiri icin. Donus: markdown metni ('' ise yorum yok)."""
+    spy_chg/weekday: kirmizi gun kurali satiri icin. slot: isim basi dilim (tarama tutari / 4) —
+    kontrat sayisi icin. Donus: markdown metni ('' ise yorum yok)."""
     if df is None or not len(df):
         return ""
     open_syms = set(open_syms or [])
@@ -251,13 +266,17 @@ def build(df, open_syms, ind_map, open_betas=None, spy_chg=None, weekday=None):
         # user isteği 2026-09-30: satır sonunda çizgi + 1 kontratın teminatı (strike × 100)
         try:
             tem = f" | **1 put = \\${float(r.strike) * 100:,.0f} teminat**"
+            # 2026-10-19 (Bora onayi): dilime sigan kontrat sayisi
+            _n = kontrat(r.strike, slot)
+            if slot and _n > 1:
+                tem += f" · dilime {_n} kontrat = \\${_n * float(r.strike) * 100:,.0f}"
         except Exception:
             tem = ""
         # user isteği 2026-09-10: her ticker ayrı satır; önerilen yeşil, diğerleri kırmızı
         renk = "green" if not (engel or eksi) else "red"
         # 2026-10-15 (user onayi): ATR tamponu notu satir sonunda — SALT BILGI, renk/grup degismez
         try:
-            atr_txt = f" | {atr_notu(r, atrs.get(r.sym))}"
+            atr_txt = f" | {atr_notu(r, atrs.get(r.sym), slot)}"
         except Exception:
             atr_txt = " | ATR okunamadı"
         txt = f"- :{renk}[**{r.sym}**] {prim} — {', '.join(arti + eksi + engel)}{tem}{atr_txt}"
