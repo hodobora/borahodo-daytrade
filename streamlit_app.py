@@ -13,6 +13,7 @@ import streamlit as st
 import wheel_scan
 import wheel_store
 import wheel_comment
+import wheel_regime
 
 ET = ZoneInfo("America/New_York")
 GUN_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
@@ -551,6 +552,16 @@ with tab_scan:
                      f"UYGUN DEĞİL (VIX kuralı). Şu an: {_vl:.1f}")
         else:
             st.caption(f"✅ VIX önceki kapanış {_vp:.1f} (eşik {VIX_MAX:.0f}) — VIX kuralı: uygun · şu an {_vl:.1f}")
+        # Rejim satiri (Bora onayi 2026-10-19): Dostum'un altinda AYRI kutu, tarama verisiyle karismaz.
+        # Kaynak: Supabase wheel_trades (acilan putlar). SALT BILGI — tarama/siralama/secim degismez.
+        try:
+            _rs, _ru = wheel_regime.line(wheel_regime.summary(wheel_store.get_wheel()))
+            with st.container(border=True):
+                st.caption(_rs)
+                if _ru:
+                    st.error(_ru)
+        except Exception as _ex:
+            st.caption(f"Rejim satırı üretilemedi: {_ex}")
         for r in df.itertuples():
             ivr = wheel_store.get_iv_rank(r.sym, r.atm_iv) if r.atm_iv else None
             ivr_txt = f" · IVR~{ivr}" if ivr is not None else ""
