@@ -64,7 +64,7 @@ def line(s):
     Uyari metni yalniz uyari varken doner; panel onu ayri kirmizi satir olarak gosterir."""
     taban = _pct(s["taban_med"]) + ("" if s["taban_bitti"] else " (oluşuyor)")
     if s["uyari"]:
-        durum = "UYARI"
+        durum = "UYARI → tavan 1.5x"  # KURAL (Bora 2026-10-21)
     elif s["taban_bitti"] and (s["taban_n"] < MIN_N or s["son3_n"] < MIN_N):
         durum = "yetersiz veri"
     else:
@@ -72,6 +72,9 @@ def line(s):
     satir = f"📉 Rejim: son 3 ay {_pct(s['son3_med'])} · taban {taban} · durum: {durum}"
     uyari = None
     if s["uyari"]:
-        uyari = (f"🟥 PRİMLER İNCELİYOR — son 3 ayın prim/teminat medyanı tabanın "
-                 f"%{(1 - s['oran']) * 100:.0f} altında (eşik %30). Karar: Bora.")
+        # KURAL (Bora 2026-10-21): uyari acikken kaldirac tavani 2.5x -> 1.5x (yalniz yeni girisler);
+        # son 3 ay medyani taban x 0.70'i gecince 2.5x'e donulur
+        uyari = (f"🟥 PRİMLER İNCELİYOR — KURAL: kaldıraç tavanı 1.5x (yalnız yeni girişler). "
+                 f"Son 3 ayın prim/teminat medyanı tabanın %{(1 - s['oran']) * 100:.0f} altında (eşik %30). "
+                 "Medyan tabanın %70'ini yeniden geçince 2.5x'e dönülür.")
     return satir, uyari
